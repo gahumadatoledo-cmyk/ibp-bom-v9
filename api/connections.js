@@ -1,8 +1,8 @@
 import crypto from 'crypto'
 
-const REDIS_URL = process.env.KV_REST_API_URL
+const REDIS_URL   = process.env.KV_REST_API_URL
 const REDIS_TOKEN = process.env.KV_REST_API_TOKEN
-const KEY = 'ibp:connections'
+const KEY = 'cids:connections'
 
 async function redisGet(key) {
   const resp = await fetch(`${REDIS_URL}/pipeline`, {
@@ -16,9 +16,7 @@ async function redisGet(key) {
   try {
     const parsed = JSON.parse(result)
     return Array.isArray(parsed) ? parsed : []
-  } catch {
-    return []
-  }
+  } catch { return [] }
 }
 
 async function redisSet(key, value) {
@@ -40,36 +38,9 @@ function encrypt(text) {
   return iv.toString('hex') + ':' + cipher.update(text, 'utf8', 'hex') + cipher.final('hex')
 }
 
-// Elimina passwords de un acuerdo antes de enviarlo al frontend
-function stripPasswords(conn) {
+function stripPassword(conn) {
   const { password, ...rest } = conn
-  if (rest.com0326) {
-    const { password: _, ...c } = rest.com0326
-    rest.com0326 = c
-  }
-  if (rest.com0068) {
-    const { password: _, ...c } = rest.com0068
-    rest.com0068 = c
-  }
   return rest
-}
-
-// Encripta un acuerdo de comunicación. existing = acuerdo actual en Redis (para conservar password si no viene nueva)
-function encryptAgreement(agreement, existing) {
-  if (!agreement) return undefined
-  const { url, user, password, taskmon } = agreement
-  if (!url && !user) return undefined
-  const encryptedPw = password ? encrypt(password) : existing?.password
-  const out = { url: url || '', user: user || '', password: encryptedPw || '' }
-  // taskmon es un sub-objeto { enabled, url } dentro de com0068 — se preserva si viene, o se mantiene el existente
-  if (taskmon !== undefined) {
-    if (taskmon && (taskmon.enabled || taskmon.url)) {
-      out.taskmon = { enabled: !!taskmon.enabled, url: taskmon.url || '' }
-    }
-  } else if (existing?.taskmon) {
-    out.taskmon = existing.taskmon
-  }
-  return out
 }
 
 export default async function handler(req, res) {
@@ -86,28 +57,30 @@ export default async function handler(req, res) {
     const connections = await redisGet(KEY)
 
     if (req.method === 'GET') {
-      return res.json(connections.map(stripPasswords))
+      return res.json(connections.map(stripPassword))
     }
 
     if (req.method === 'POST') {
-      const { name, ambiente, jobUser, logoUrl, com0326, com0068 } = req.body
-      if (!name || !ambiente) return res.status(400).json({ error: 'Nombre y ambiente son obligatorios' })
-
-      const enc326 = encryptAgreement(com0326)
-      const enc068 = encryptAgreement(com0068)
+      const { name, serviceUrl, orgName, user, password, isProduction, logoUrl } = req.body
+      if (!name)       return res.status(400).json({ error: 'El nombre es obligatorio' })
+      if (!serviceUrl) return res.status(400).json({ error: 'La URL del servicio es obligatoria' })
+      if (!orgName)    return res.status(400).json({ error: 'El nombre de organización es obligatorio' })
+      if (!user)       return res.status(400).json({ error: 'El usuario es obligatorio' })
+      if (!password)   return res.status(400).json({ error: 'La contraseña es obligatoria para conexiones nuevas' })
 
       const newConn = {
-        id: crypto.randomUUID(),
+        id:           crypto.randomUUID(),
         name,
-        ambiente,
-        jobUser: jobUser || '',
-        logoUrl: logoUrl || '',
-        ...(enc326 ? { com0326: enc326 } : {}),
-        ...(enc068 ? { com0068: enc068 } : {}),
+        serviceUrl:   serviceUrl.replace(/\/$/, ''),
+        orgName,
+        user,
+        password:     encrypt(password),
+        isProduction: !!isProduction,
+        logoUrl:      logoUrl || '',
       }
       connections.push(newConn)
       await redisSet(KEY, connections)
-      return res.status(201).json(stripPasswords(newConn))
+      return res.status(201).json(stripPassword(newConn))
     }
 
     const id = req.body?.id
@@ -117,26 +90,21 @@ export default async function handler(req, res) {
       const idx = connections.findIndex(c => c.id === id)
       if (idx === -1) return res.status(404).json({ error: 'No encontrado' })
       const existing = connections[idx]
-      const { name, ambiente, jobUser, logoUrl, com0326, com0068 } = req.body
-
-      const enc326 = 'com0326' in req.body ? encryptAgreement(com0326, existing.com0326) : undefined
-      const enc068 = 'com0068' in req.body ? encryptAgreement(com0068, existing.com0068) : undefined
+      const { name, serviceUrl, orgName, user, password, isProduction, logoUrl } = req.body
 
       connections[idx] = {
         ...existing,
-        ...(name !== undefined && { name }),
-        ...(ambiente !== undefined && { ambiente }),
-        ...(jobUser !== undefined && { jobUser }),
-        ...(logoUrl !== undefined && { logoUrl }),
-        ...('com0326' in req.body && { com0326: enc326 }),
-        ...('com0068' in req.body && { com0068: enc068 }),
+        ...(name        !== undefined && { name }),
+        ...(serviceUrl  !== undefined && { serviceUrl: serviceUrl.replace(/\/$/, '') }),
+        ...(orgName     !== undefined && { orgName }),
+        ...(user        !== undefined && { user }),
+        // Only update password if a new one was provided
+        ...(password    ? { password: encrypt(password) } : {}),
+        ...(isProduction !== undefined && { isProduction: !!isProduction }),
+        ...(logoUrl     !== undefined && { logoUrl }),
       }
-      // Limpiar acuerdos que quedaron undefined (el usuario los vació)
-      if (!connections[idx].com0326) delete connections[idx].com0326
-      if (!connections[idx].com0068) delete connections[idx].com0068
-
       await redisSet(KEY, connections)
-      return res.json(stripPasswords(connections[idx]))
+      return res.json(stripPassword(connections[idx]))
     }
 
     if (req.method === 'DELETE') {

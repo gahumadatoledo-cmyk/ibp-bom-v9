@@ -1,84 +1,39 @@
 import { useState } from 'react'
 
-const AMBIENTES = [
-  { value: '', label: 'Seleccionar...' },
-  { value: 'Calidad', label: 'Calidad' },
-  { value: 'Producción', label: 'Producción' },
-]
-
 export default function ConnectionForm({ initial, onSaved, onCancel }) {
   const [form, setForm] = useState({
-    name:     initial?.name ? initial.name.replace(/ \((Calidad|Producción)\)$/, '') : '',
-    ambiente: initial?.ambiente || '',
-    jobUser:  initial?.jobUser  || '',
-    logoUrl:  initial?.logoUrl  || '',
-    com0326: {
-      url:      initial?.com0326?.url      || '',
-      user:     initial?.com0326?.user     || '',
-      password: '',
-    },
-    com0068: {
-      url:      initial?.com0068?.url      || '',
-      user:     initial?.com0068?.user     || '',
-      password: '',
-    },
+    name:         initial?.name        || '',
+    serviceUrl:   initial?.serviceUrl  || '',
+    orgName:      initial?.orgName     || '',
+    user:         initial?.user        || '',
+    password:     '',
+    isProduction: initial?.isProduction ?? true,
+    logoUrl:      initial?.logoUrl     || '',
   })
   const [saving, setSaving] = useState(false)
   const [error,  setError]  = useState('')
 
-  function setGeneral(k, v) { setForm(p => ({ ...p, [k]: v })) }
-  function setAgreement(key, k, v) { setForm(p => ({ ...p, [key]: { ...p[key], [k]: v } })) }
-
-  function validateAgreement(a, name, isNew) {
-    const hasAny = a.url || a.user || a.password
-    if (!hasAny) return null // vacío completo → se omite, ok
-    if (!a.url)  return `${name}: falta la URL`
-    if (!a.user) return `${name}: falta el usuario`
-    if (isNew && !a.password) return `${name}: la contraseña es obligatoria para conexiones nuevas`
-    return null
-  }
+  function set(k, v) { setForm(p => ({ ...p, [k]: v })) }
 
   async function handleSave() {
-    if (!form.name)    { setError('El nombre es obligatorio'); return }
-    if (!form.ambiente) { setError('Selecciona un ambiente'); return }
-
-    const isNew = !initial
-    const err326 = validateAgreement(form.com0326, 'SAP_COM_0326', isNew)
-    const err068 = validateAgreement(form.com0068, 'SAP_COM_0068', isNew)
-    if (err326) { setError(err326); return }
-    if (err068) { setError(err068); return }
+    if (!form.name)       { setError('El nombre es obligatorio'); return }
+    if (!form.serviceUrl) { setError('La URL del servicio es obligatoria'); return }
+    if (!form.orgName)    { setError('El nombre de organización es obligatorio'); return }
+    if (!form.user)       { setError('El usuario es obligatorio'); return }
+    if (!initial && !form.password) { setError('La contraseña es obligatoria para conexiones nuevas'); return }
 
     setSaving(true); setError('')
     try {
       const body = {
-        name:     `${form.name} (${form.ambiente})`,
-        ambiente: form.ambiente,
-        jobUser:  form.jobUser,
-        logoUrl:  form.logoUrl,
+        name:         form.name,
+        serviceUrl:   form.serviceUrl.replace(/\/$/, ''),
+        orgName:      form.orgName,
+        user:         form.user,
+        isProduction: form.isProduction,
+        logoUrl:      form.logoUrl,
+        ...(form.password ? { password: form.password } : {}),
       }
       if (initial) body.id = initial.id
-
-      // Incluir acuerdo solo si tiene url+user (password es opcional en edición)
-      if (form.com0326.url || form.com0326.user) {
-        body.com0326 = {
-          url:  form.com0326.url.replace(/\/$/, ''),
-          user: form.com0326.user,
-          ...(form.com0326.password ? { password: form.com0326.password } : {}),
-        }
-      } else if (initial) {
-        // Edición: el usuario vació la sección → eliminar el acuerdo
-        body.com0326 = null
-      }
-
-      if (form.com0068.url || form.com0068.user) {
-        body.com0068 = {
-          url:  form.com0068.url.replace(/\/$/, ''),
-          user: form.com0068.user,
-          ...(form.com0068.password ? { password: form.com0068.password } : {}),
-        }
-      } else if (initial) {
-        body.com0068 = null
-      }
 
       const res = await fetch('/api/connections', {
         method:  initial ? 'PUT' : 'POST',
@@ -100,40 +55,63 @@ export default function ConnectionForm({ initial, onSaved, onCancel }) {
         {initial ? 'Editar conexión' : 'Nueva conexión'}
       </div>
 
-      {/* General */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 24 }}>
-        <Field label="Nombre conexión" value={form.name} onChange={v => setGeneral('name', v)} placeholder="ej: IBP Cliente ABC" />
-        <SelectField label="Ambiente" value={form.ambiente} onChange={v => setGeneral('ambiente', v)} options={AMBIENTES} />
-        <Field label="Usuario de negocio (JobUser)" value={form.jobUser} onChange={v => setGeneral('jobUser', v)} placeholder="EXT_USUARIO" mono />
-        <Field label="URL del logo (opcional)" value={form.logoUrl} onChange={v => setGeneral('logoUrl', v)} placeholder="https://empresa.com/logo.png" />
+      {/* Row 1: Name + Org */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
+        <Field label="Nombre conexión" value={form.name} onChange={v => set('name', v)} placeholder="ej: CI-DS Producción" />
+        <Field label="Organización (orgName)" value={form.orgName} onChange={v => set('orgName', v)} placeholder="miOrganizacion" mono />
       </div>
 
-      {/* SAP_COM_0326 */}
-      <AgreementSection
-        title="SAP_COM_0326 — Application Jobs"
-        subtitle="Resumen · Job Templates · Job Monitor"
-        values={form.com0326}
-        onChange={(k, v) => setAgreement('com0326', k, v)}
-        isEditing={!!initial}
-        hasExisting={!!initial?.com0326?.user}
-      />
-
-      {/* SAP_COM_0068 */}
-      <AgreementSection
-        title="SAP_COM_0068 — Resource Consumption"
-        subtitle="Resource Stats"
-        values={form.com0068}
-        onChange={(k, v) => setAgreement('com0068', k, v)}
-        isEditing={!!initial}
-        hasExisting={!!initial?.com0068?.user}
-      />
-
-      {form.name && form.ambiente && (
-        <div style={{ marginTop: 4, fontSize: 11, color: 'var(--text2)' }}>
-          Nombre final: <strong style={{ color: 'var(--text)' }}>{form.name} ({form.ambiente})</strong>
+      {/* Row 2: Service URL full width */}
+      <div style={{ marginBottom: 14 }}>
+        <Field
+          label="URL del servicio SOAP"
+          value={form.serviceUrl}
+          onChange={v => set('serviceUrl', v)}
+          placeholder="https://us.cids.cloud.sap/webservices"
+          mono
+        />
+        <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 4 }}>
+          Kyma: https://&lt;host&gt;/webservices &nbsp;·&nbsp; Neo: https://&lt;host&gt;/DSoD/webservices
         </div>
-      )}
-      {error && <div style={{ marginTop: 12, fontSize: 12, color: 'var(--red)' }}>✕ {error}</div>}
+      </div>
+
+      {/* Row 3: User + Password + Repo */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 14, marginBottom: 14 }}>
+        <Field label="Usuario" value={form.user} onChange={v => set('user', v)} placeholder="WebServicesUser" mono />
+        <Field
+          label={initial ? 'Contraseña (vacío = mantener)' : 'Contraseña'}
+          value={form.password}
+          onChange={v => set('password', v)}
+          type="password"
+          placeholder={initial ? '••••••••' : 'Contraseña'}
+        />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+          <label style={{ fontSize: 10, fontWeight: 600, color: 'var(--text2)', textTransform: 'uppercase', letterSpacing: '.07em' }}>
+            Repositorio
+          </label>
+          <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+            {[{ label: 'Producción', value: true }, { label: 'Sandbox', value: false }].map(opt => (
+              <label key={String(opt.value)} style={{ display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer', fontSize: 12, color: 'var(--text)' }}>
+                <input
+                  type="radio"
+                  name="isProduction"
+                  checked={form.isProduction === opt.value}
+                  onChange={() => set('isProduction', opt.value)}
+                  style={{ accentColor: 'var(--accent)' }}
+                />
+                {opt.label}
+              </label>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Row 4: Logo URL */}
+      <div style={{ marginBottom: 14 }}>
+        <Field label="URL del logo (opcional)" value={form.logoUrl} onChange={v => set('logoUrl', v)} placeholder="https://empresa.com/logo.png" />
+      </div>
+
+      {error && <div style={{ marginTop: 4, fontSize: 12, color: 'var(--red)' }}>✕ {error}</div>}
 
       <div style={{ display: 'flex', gap: 10, marginTop: 20, justifyContent: 'flex-end' }}>
         <button type="button" onClick={onCancel} style={{
@@ -149,30 +127,6 @@ export default function ConnectionForm({ initial, onSaved, onCancel }) {
   )
 }
 
-function AgreementSection({ title, subtitle, values, onChange, isEditing, hasExisting }) {
-  return (
-    <div style={{ marginBottom: 20 }}>
-      <div style={{ marginBottom: 10 }}>
-        <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: '.06em' }}>
-          {title}
-        </div>
-        <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 2 }}>{subtitle}</div>
-      </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 14 }}>
-        <Field label="URL API" value={values.url} onChange={v => onChange('url', v)} placeholder="https://tenant-api.scmibp.ondemand.com/..." mono />
-        <Field label="Usuario" value={values.user} onChange={v => onChange('user', v)} placeholder="COM_USER" mono />
-        <Field
-          label={isEditing && hasExisting ? 'Contraseña (vacío = mantener)' : 'Contraseña'}
-          value={values.password}
-          onChange={v => onChange('password', v)}
-          type="password"
-          placeholder={isEditing && hasExisting ? '••••••••' : 'Contraseña'}
-        />
-      </div>
-    </div>
-  )
-}
-
 function Field({ label, value, onChange, placeholder, type = 'text', mono }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
@@ -182,33 +136,11 @@ function Field({ label, value, onChange, placeholder, type = 'text', mono }) {
         style={{
           background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 6,
           color: 'var(--text)', fontFamily: mono ? 'var(--mono)' : 'var(--font)',
-          fontSize: 12, padding: '8px 12px', outline: 'none',
+          fontSize: 12, padding: '8px 12px', outline: 'none', width: '100%', boxSizing: 'border-box',
         }}
         onFocus={e => e.target.style.borderColor = 'var(--accent)'}
         onBlur={e => e.target.style.borderColor = 'var(--border)'}
       />
-    </div>
-  )
-}
-
-function SelectField({ label, value, onChange, options }) {
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-      <label style={{ fontSize: 10, fontWeight: 600, color: 'var(--text2)', textTransform: 'uppercase', letterSpacing: '.07em' }}>{label}</label>
-      <select
-        value={value} onChange={e => onChange(e.target.value)}
-        style={{
-          background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 6,
-          color: value ? 'var(--text)' : 'var(--text3)', fontFamily: 'var(--font)',
-          fontSize: 12, padding: '8px 12px', outline: 'none', cursor: 'pointer',
-        }}
-        onFocus={e => e.target.style.borderColor = 'var(--accent)'}
-        onBlur={e => e.target.style.borderColor = 'var(--border)'}
-      >
-        {options.map(o => (
-          <option key={o.value} value={o.value}>{o.label}</option>
-        ))}
-      </select>
     </div>
   )
 }

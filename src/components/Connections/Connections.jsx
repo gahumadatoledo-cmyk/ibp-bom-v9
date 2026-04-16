@@ -40,19 +40,18 @@ export default function Connections({ connections, onSaved, onDeleted, onSelect 
     setTesting(conn.id)
     setTestResult(p => ({ ...p, [conn.id]: null }))
     const start = performance.now()
-    const com = conn.com0326?.url ? '0326' : conn.com0068?.url ? '0068' : '0326'
     try {
-      const res = await fetch('/api/proxy', {
+      const res = await fetch('/api/soap', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ connectionId: conn.id, path: '/$metadata', com }),
+        body: JSON.stringify({ connectionId: conn.id, operation: 'ping', params: {} }),
       })
       const duration = Math.round(performance.now() - start)
-      addLog({ method: 'POST', path: `/$metadata (${conn.name})`, status: res.status, duration, detail: res.ok ? 'Conexión exitosa' : 'Error de conexión' })
+      addLog({ method: 'POST', path: `ping (${conn.name})`, status: res.status, duration, detail: res.ok ? 'Conexión exitosa' : 'Error de conexión' })
       setTestResult(p => ({ ...p, [conn.id]: res.ok ? 'ok' : 'error' }))
     } catch (e) {
       const duration = Math.round(performance.now() - start)
-      addLog({ method: 'POST', path: `/$metadata (${conn.name})`, status: 0, duration, detail: e.message })
+      addLog({ method: 'POST', path: `ping (${conn.name})`, status: 0, duration, detail: e.message })
       setTestResult(p => ({ ...p, [conn.id]: 'error' }))
     } finally {
       setTesting(null)
@@ -66,7 +65,7 @@ export default function Connections({ connections, onSaved, onDeleted, onSelect 
         <div>
           <div style={{ fontSize: 18, fontWeight: 700, color: '#fff' }}>Conexiones</div>
           <div style={{ fontSize: 12, color: 'var(--text2)', marginTop: 3 }}>
-            Gestiona los sistemas SAP IBP disponibles para el equipo de soporte
+            Gestiona los sistemas SAP CI-DS disponibles para el equipo de soporte
           </div>
         </div>
         <button onClick={handleNew} style={{
@@ -99,7 +98,7 @@ export default function Connections({ connections, onSaved, onDeleted, onSelect 
             No hay conexiones configuradas
           </div>
           <div style={{ fontSize: 12, color: 'var(--text2)', marginBottom: 20 }}>
-            Agrega un sistema SAP IBP para empezar a gestionar jobs
+            Agrega un sistema SAP CI-DS para empezar a gestionar tasks
           </div>
           <button onClick={handleNew} style={{
             background: 'var(--accent)', border: 'none', borderRadius: 7,
