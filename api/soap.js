@@ -68,7 +68,10 @@ function xe(s) {
 function parseFault(xml) {
   const code   = xmlVal(xml, 'faultcode')   || xmlVal(xml, 'faultCode')
   const str    = xmlVal(xml, 'faultstring') || xmlVal(xml, 'faultString')
-  if (code || str) return { faultCode: code, faultString: str }
+  if (code || str) {
+    const detail = xmlVal(xml, 'message') || xmlVal(xml, 'detail') || xmlVal(xml, 'WebFaultException')
+    return { faultCode: code, faultString: detail ? `${str} — ${detail}` : str }
+  }
   return null
 }
 
@@ -405,6 +408,7 @@ export default async function handler(req, res) {
       return res.status(status).json({
         error: fault?.faultString || `SOAP error HTTP ${status}`,
         faultCode: fault?.faultCode,
+        rawXml: fault ? undefined : text.slice(0, 2000),
       })
     }
 
