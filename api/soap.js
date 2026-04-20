@@ -79,7 +79,7 @@ function buildEnvelope(body, sessionId) {
     ? `<soapenv:Header><SessionId>${xe(sessionId)}</SessionId></soapenv:Header>`
     : '<soapenv:Header/>'
   return `<?xml version="1.0" encoding="UTF-8"?>
-<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/">
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:web="http://webservices.dsod.sap.com/">
   ${header}
   <soapenv:Body>${body}</soapenv:Body>
 </soapenv:Envelope>`
@@ -103,12 +103,12 @@ async function soapCall(serviceUrl, action, envelopeXml) {
 // ─── Logon ────────────────────────────────────────────────────────────────────
 
 async function logon(serviceUrl, orgName, user, password, isProduction) {
-  const body = `<logon>
+  const body = `<web:logonRequest>
       <orgName>${xe(orgName)}</orgName>
       <userName>${xe(user)}</userName>
       <password>${xe(password)}</password>
       <isProduction>${isProduction ? 'true' : 'false'}</isProduction>
-    </logon>`
+    </web:logonRequest>`
   const { ok, text, status } = await soapCall(serviceUrl, 'logon', buildEnvelope(body, null))
   if (!ok) {
     const fault = parseFault(text)
@@ -125,45 +125,45 @@ function buildBody(operation, params = {}) {
   switch (operation) {
 
     case 'ping':
-      return `<ping><SessionID>${xe(params.sessionId)}</SessionID></ping>`
+      return `<web:pingRequest><SessionID>${xe(params.sessionId)}</SessionID></web:pingRequest>`
 
     case 'logout':
-      return `<logout><SessionID>${xe(params.sessionId)}</SessionID></logout>`
+      return `<web:logoutRequest><SessionID>${xe(params.sessionId)}</SessionID></web:logoutRequest>`
 
     case 'getProjects':
-      return `<getProjects/>`
+      return `<web:getProjectsRequest/>`
 
     case 'getProjectTasks':
-      return `<getProjectTasks><projectGuid>${xe(params.projectGuid)}</projectGuid></getProjectTasks>`
+      return `<web:getProjectTasksRequest><projectGuid>${xe(params.projectGuid)}</projectGuid></web:getProjectTasksRequest>`
 
     case 'searchTasks':
-      return `<searchTasks><nameFilter>${xe(params.nameFilter || '')}</nameFilter></searchTasks>`
+      return `<web:searchTasksRequest><nameFilter>${xe(params.nameFilter || '')}</nameFilter></web:searchTasksRequest>`
 
     case 'getTaskInfo':
-      return `<getTaskInfo><taskGuid>${xe(params.taskGuid)}</taskGuid></getTaskInfo>`
+      return `<web:getTaskInfoRequest><taskGuid>${xe(params.taskGuid)}</taskGuid></web:getTaskInfoRequest>`
 
     case 'getAgents':
-      return `<getAgents><activeOnly>${params.activeOnly ? 'true' : 'false'}</activeOnly></getAgents>`
+      return `<web:getAgentsRequest><activeOnly>${params.activeOnly ? 'true' : 'false'}</activeOnly></web:getAgentsRequest>`
 
     case 'getSystemConfigurations':
-      return `<getSystemConfigurations/>`
+      return `<web:getSystemConfigurationsRequest/>`
 
     case 'runTask': {
       const vars = (params.globalVariables || [])
         .map(v => `<variable name="${xe(v.name)}">${xe(v.value)}</variable>`)
         .join('\n      ')
-      return `<runTask>
+      return `<web:runTaskRequest>
         <taskName>${xe(params.taskName)}</taskName>
         <description>${xe(params.description || '')}</description>
         ${params.agentName  ? `<agentName>${xe(params.agentName)}</agentName>` : ''}
         ${params.agentGroup ? `<agentGroup>${xe(params.agentGroup)}</agentGroup>` : ''}
         ${params.profileName ? `<profileName>${xe(params.profileName)}</profileName>` : ''}
         ${vars ? `<globalVariables>${vars}</globalVariables>` : ''}
-      </runTask>`
+      </web:runTaskRequest>`
     }
 
     case 'getTaskStatusByRunId2':
-      return `<getTaskStatusByRunId2><runId>${xe(params.runId)}</runId></getTaskStatusByRunId2>`
+      return `<web:getTaskStatusByRunId2Request><runId>${xe(params.runId)}</runId></web:getTaskStatusByRunId2Request>`
 
     case 'getAllExecutedTasks2': {
       const startFrom = params.startDateFrom
@@ -172,30 +172,30 @@ function buildBody(operation, params = {}) {
       const endFrom = params.endDateFrom
         ? `<endDate><from>${xe(params.endDateFrom)}</from>${params.endDateTo ? `<to>${xe(params.endDateTo)}</to>` : ''}</endDate>`
         : ''
-      return `<getAllExecutedTasks2>
+      return `<web:getAllExecutedTasks2Request>
         <version>2.0</version>
         ${params.taskName   ? `<taskName>${xe(params.taskName)}</taskName>` : ''}
         ${startFrom}
         ${endFrom}
         ${params.statusCode ? `<statusCode>${xe(params.statusCode)}</statusCode>` : ''}
-      </getAllExecutedTasks2>`
+      </web:getAllExecutedTasks2Request>`
     }
 
     case 'getTaskLogs': {
       const logBlock = (name, p) => p?.getLog
         ? `<${name}><getLog>true</getLog><pageNum>${p.pageNum || 1}</pageNum></${name}>`
         : ''
-      return `<getTaskLogs>
+      return `<web:getTaskLogsRequest>
         <runID>${xe(params.runId)}</runID>
         <base64Encode>${params.base64Encode !== false ? 'true' : 'false'}</base64Encode>
         ${logBlock('traceLog',   params.traceLog)}
         ${logBlock('monitorLog', params.monitorLog)}
         ${logBlock('errorLog',   params.errorLog)}
-      </getTaskLogs>`
+      </web:getTaskLogsRequest>`
     }
 
     case 'cancelTask':
-      return `<cancelTask><runId>${xe(params.runId)}</runId></cancelTask>`
+      return `<web:cancelTaskRequest><runId>${xe(params.runId)}</runId></web:cancelTaskRequest>`
 
     default:
       throw new Error(`Unknown operation: ${operation}`)
