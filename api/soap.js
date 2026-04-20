@@ -80,7 +80,7 @@ function parseFault(xml) {
 function buildEnvelope(body, sessionId, version) {
   let headerContent = ''
   if (sessionId) headerContent += `<SessionId>${xe(sessionId)}</SessionId>`
-  if (version)   headerContent += `<Version>${xe(version)}</Version>`
+  if (version)   headerContent += `<web:Version>${xe(version)}</web:Version>`
   const header = headerContent ? `<soapenv:Header>${headerContent}</soapenv:Header>` : '<soapenv:Header/>'
   return `<?xml version="1.0" encoding="UTF-8"?>
 <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:web="http://webservices.dsod.sap.com/">
