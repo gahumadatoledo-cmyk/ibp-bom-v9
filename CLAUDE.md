@@ -37,6 +37,28 @@ Aplicación web para gestionar y orquestar tasks en sistemas SAP Cloud Integrati
 - `getTaskLogs(runId, traceLog?, monitorLog?, errorLog?)` → logs paginados
 - `cancelTask(runId)` → TASK_NOT_STARTED | TASK_FINISHED | TASK_CANCEL_ISSUED
 
+### WSDL — Elementos SOAP reales (document-literal, Neo)
+WSDL completo en `docs/service.wsdl`. Namespace: `http://webservices.dsod.sap.com/` (prefijo `web:`).
+
+| Operación               | SOAPAction                        | Body element (web:)              | Headers extra  |
+|-------------------------|-----------------------------------|----------------------------------|----------------|
+| logon                   | `function=logon`                  | `logonRequest`                   | —              |
+| ping                    | `function=ping`                   | `pingRequest`                    | —              |
+| logout                  | `function=logoff`                 | `logoutRequest`                  | —              |
+| getProjects             | `function=getAllProjects`         | `AllProjectsRequest`             | SessionId      |
+| getProjectTasks         | `function=getAllProjectTasks`     | `AllProjectTasksRequest`         | SessionId      |
+| getSystemConfigurations | `function=getAllSystemConfigurations` | `AllSystemConfigurationsRequest` | SessionId   |
+| getAgents               | `function=getAllAgents`           | `AllAgentsRequest`               | SessionId      |
+| searchTasks             | `function=searchTasks`            | `searchTasksRequest`             | SessionId      |
+| getTaskInfo             | `function=getTaskInfo`            | `taskInfoResponse` (*)           | SessionId      |
+| runTask                 | `function=runTask`                | `TaskInfo`                       | SessionId      |
+| cancelTask              | `function=cancelTask`             | `CancelTaskRequest`              | SessionId      |
+| getTaskLogs             | `function=getTaskLogs`            | `TaskLogsRequest`                | SessionId      |
+| getTaskStatusByRunId2   | `function=getTaskStatusByRunId2`  | `TaskStatusRequest`              | SessionId, Version |
+| getAllExecutedTasks2     | `function=getAllExecutedTasks2`   | `executedTaskFilterRequest`      | SessionId, Version |
+
+(*) WSDL usa `parts="taskInfoResponse"` en el input — posible typo SAP, confirmar al testear.
+
 ### Status codes
 `RUNNING`, `SUCCESS`, `SUCCESS_WITH_ERRORS_D`, `SUCCESS_WITH_ERRORS_E`, `ERROR`, `QUEUEING`, `IMPORTED`, `FETCHED`, `TERMINATED`, `TERMINATION_FAILED`, `UNKNOWN`
 

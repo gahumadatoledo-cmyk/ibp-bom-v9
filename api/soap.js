@@ -74,10 +74,11 @@ function parseFault(xml) {
 
 // ─── SOAP envelope builder ────────────────────────────────────────────────────
 
-function buildEnvelope(body, sessionId) {
-  const header = sessionId
-    ? `<soapenv:Header><SessionId>${xe(sessionId)}</SessionId></soapenv:Header>`
-    : '<soapenv:Header/>'
+function buildEnvelope(body, sessionId, version) {
+  let headerContent = ''
+  if (sessionId) headerContent += `<SessionId>${xe(sessionId)}</SessionId>`
+  if (version)   headerContent += `<Version>${xe(version)}</Version>`
+  const header = headerContent ? `<soapenv:Header>${headerContent}</soapenv:Header>` : '<soapenv:Header/>'
   return `<?xml version="1.0" encoding="UTF-8"?>
 <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:web="http://webservices.dsod.sap.com/">
   ${header}
@@ -87,12 +88,12 @@ function buildEnvelope(body, sessionId) {
 
 // ─── SOAP HTTP call ───────────────────────────────────────────────────────────
 
-async function soapCall(serviceUrl, action, envelopeXml) {
+async function soapCall(serviceUrl, soapAction, envelopeXml) {
   const resp = await fetch(serviceUrl, {
     method: 'POST',
     headers: {
       'Content-Type': 'text/xml; charset=utf-8',
-      'SOAPAction':   `function=${action}`,
+      'SOAPAction':   soapAction,
     },
     body: envelopeXml,
   })
@@ -109,7 +110,7 @@ async function logon(serviceUrl, orgName, user, password, isProduction) {
       <password>${xe(password)}</password>
       <isProduction>${isProduction ? 'true' : 'false'}</isProduction>
     </web:logonRequest>`
-  const { ok, text, status } = await soapCall(serviceUrl, 'logon', buildEnvelope(body, null))
+  const { ok, text, status } = await soapCall(serviceUrl, 'function=logon', buildEnvelope(body, null))
   if (!ok) {
     const fault = parseFault(text)
     throw new Error(fault?.faultString || `logon failed (HTTP ${status})`)
@@ -131,39 +132,39 @@ function buildBody(operation, params = {}) {
       return `<web:logoutRequest><SessionID>${xe(params.sessionId)}</SessionID></web:logoutRequest>`
 
     case 'getProjects':
-      return `<web:getProjectsRequest/>`
+      return `<web:AllProjectsRequest/>`
 
     case 'getProjectTasks':
-      return `<web:getProjectTasksRequest><projectGuid>${xe(params.projectGuid)}</projectGuid></web:getProjectTasksRequest>`
+      return `<web:AllProjectTasksRequest><projectGuid>${xe(params.projectGuid)}</projectGuid></web:AllProjectTasksRequest>`
 
     case 'searchTasks':
       return `<web:searchTasksRequest><nameFilter>${xe(params.nameFilter || '')}</nameFilter></web:searchTasksRequest>`
 
     case 'getTaskInfo':
-      return `<web:getTaskInfoRequest><taskGuid>${xe(params.taskGuid)}</taskGuid></web:getTaskInfoRequest>`
+      return `<web:taskInfoResponse><taskGuid>${xe(params.taskGuid)}</taskGuid></web:taskInfoResponse>`
 
     case 'getAgents':
-      return `<web:getAgentsRequest><activeOnly>${params.activeOnly ? 'true' : 'false'}</activeOnly></web:getAgentsRequest>`
+      return `<web:AllAgentsRequest><activeOnly>${params.activeOnly ? 'true' : 'false'}</activeOnly></web:AllAgentsRequest>`
 
     case 'getSystemConfigurations':
-      return `<web:getSystemConfigurationsRequest/>`
+      return `<web:AllSystemConfigurationsRequest/>`
 
     case 'runTask': {
       const vars = (params.globalVariables || [])
         .map(v => `<variable name="${xe(v.name)}">${xe(v.value)}</variable>`)
         .join('\n      ')
-      return `<web:runTaskRequest>
+      return `<web:TaskInfo>
         <taskName>${xe(params.taskName)}</taskName>
         <description>${xe(params.description || '')}</description>
         ${params.agentName  ? `<agentName>${xe(params.agentName)}</agentName>` : ''}
         ${params.agentGroup ? `<agentGroup>${xe(params.agentGroup)}</agentGroup>` : ''}
         ${params.profileName ? `<profileName>${xe(params.profileName)}</profileName>` : ''}
         ${vars ? `<globalVariables>${vars}</globalVariables>` : ''}
-      </web:runTaskRequest>`
+      </web:TaskInfo>`
     }
 
     case 'getTaskStatusByRunId2':
-      return `<web:getTaskStatusByRunId2Request><runId>${xe(params.runId)}</runId></web:getTaskStatusByRunId2Request>`
+      return `<web:TaskStatusRequest><runId>${xe(params.runId)}</runId></web:TaskStatusRequest>`
 
     case 'getAllExecutedTasks2': {
       const startFrom = params.startDateFrom
@@ -173,7 +174,6 @@ function buildBody(operation, params = {}) {
         ? `<endDate><from>${xe(params.endDateFrom)}</from>${params.endDateTo ? `<to>${xe(params.endDateTo)}</to>` : ''}</endDate>`
         : ''
       return `<web:executedTaskFilterRequest>
-        <version>2.0</version>
         ${params.taskName   ? `<taskName>${xe(params.taskName)}</taskName>` : ''}
         ${startFrom}
         ${endFrom}
@@ -185,17 +185,17 @@ function buildBody(operation, params = {}) {
       const logBlock = (name, p) => p?.getLog
         ? `<${name}><getLog>true</getLog><pageNum>${p.pageNum || 1}</pageNum></${name}>`
         : ''
-      return `<web:getTaskLogsRequest>
+      return `<web:TaskLogsRequest>
         <runID>${xe(params.runId)}</runID>
         <base64Encode>${params.base64Encode !== false ? 'true' : 'false'}</base64Encode>
         ${logBlock('traceLog',   params.traceLog)}
         ${logBlock('monitorLog', params.monitorLog)}
         ${logBlock('errorLog',   params.errorLog)}
-      </web:getTaskLogsRequest>`
+      </web:TaskLogsRequest>`
     }
 
     case 'cancelTask':
-      return `<web:cancelTaskRequest><runId>${xe(params.runId)}</runId></web:cancelTaskRequest>`
+      return `<web:CancelTaskRequest><runId>${xe(params.runId)}</runId></web:CancelTaskRequest>`
 
     default:
       throw new Error(`Unknown operation: ${operation}`)
@@ -381,14 +381,24 @@ export default async function handler(req, res) {
 
   const password = decrypt(encPw)
 
+  const soapActionMap = {
+    getProjects:             'function=getAllProjects',
+    getProjectTasks:         'function=getAllProjectTasks',
+    getSystemConfigurations: 'function=getAllSystemConfigurations',
+    getAgents:               'function=getAllAgents',
+    logout:                  'function=logoff',
+  }
+  const soapAction = soapActionMap[operation] || `function=${operation}`
+  const version = ['getAllExecutedTasks2', 'getTaskStatusByRunId2'].includes(operation) ? '2.0' : null
+
   try {
     // Logon to get SessionID
     const sessionId = await logon(serviceUrl, orgName, user, password, isProduction)
 
     // Build and execute operation
     const body = buildBody(operation, params)
-    const envelope = buildEnvelope(body, sessionId)
-    const { ok, status, text } = await soapCall(serviceUrl, operation, envelope)
+    const envelope = buildEnvelope(body, sessionId, version)
+    const { ok, status, text } = await soapCall(serviceUrl, soapAction, envelope)
 
     if (!ok) {
       const fault = parseFault(text)

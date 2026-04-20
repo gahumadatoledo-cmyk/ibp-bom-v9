@@ -1,0 +1,218 @@
+<wsdl:definitions xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/" xmlns:tns="http://www.sap.com/DSoD/webservices" xmlns:soap="http://schemas.xmlsoap.org/wsdl/soap/" xmlns:ns2="http://schemas.xmlsoap.org/soap/http" xmlns:ns1="http://webservices.dsod.sap.com/" name="DSoD_Services" targetNamespace="http://www.sap.com/DSoD/webservices">
+<wsdl:import location="https://hcids3.us3.hana.ondemand.com/DSoD/webservices?wsdl=SoapGateway.wsdl" namespace="http://webservices.dsod.sap.com/"> </wsdl:import>
+<wsdl:binding name="DSoD_ServicesSoapBinding" type="ns1:SoapGateway">
+<soap:binding style="document" transport="http://schemas.xmlsoap.org/soap/http"/>
+<wsdl:operation name="getSystemConfigurations">
+<soap:operation soapAction="function=getAllSystemConfigurations" style="document"/>
+<wsdl:input name="getSystemConfigurations">
+<soap:header message="ns1:getSystemConfigurations" part="SessionId" use="literal"> </soap:header>
+<soap:body parts="AllSystemConfigurationsRequest" use="literal"/>
+</wsdl:input>
+<wsdl:output name="getSystemConfigurationsResponse">
+<soap:body use="literal"/>
+</wsdl:output>
+<wsdl:fault name="WebFaultException">
+<soap:fault name="WebFaultException" use="literal"/>
+</wsdl:fault>
+</wsdl:operation>
+<wsdl:operation name="getProjects">
+<soap:operation soapAction="function=getAllProjects" style="document"/>
+<wsdl:input name="getProjects">
+<soap:header message="ns1:getProjects" part="SessionId" use="literal"> </soap:header>
+<soap:body parts="AllProjectsRequest" use="literal"/>
+</wsdl:input>
+<wsdl:output name="getProjectsResponse">
+<soap:body use="literal"/>
+</wsdl:output>
+<wsdl:fault name="WebFaultException">
+<soap:fault name="WebFaultException" use="literal"/>
+</wsdl:fault>
+</wsdl:operation>
+<wsdl:operation name="getProjectTasks">
+<soap:operation soapAction="function=getAllProjectTasks" style="document"/>
+<wsdl:input name="getProjectTasks">
+<soap:header message="ns1:getProjectTasks" part="SessionId" use="literal"> </soap:header>
+<soap:body parts="AllProjectTasksRequest" use="literal"/>
+</wsdl:input>
+<wsdl:output name="getProjectTasksResponse">
+<soap:body use="literal"/>
+</wsdl:output>
+<wsdl:fault name="WebFaultException">
+<soap:fault name="WebFaultException" use="literal"/>
+</wsdl:fault>
+</wsdl:operation>
+<wsdl:operation name="logon">
+<soap:operation soapAction="function=logon" style="document"/>
+<wsdl:input name="logon">
+<soap:body use="literal"/>
+</wsdl:input>
+<wsdl:output name="logonResponse">
+<soap:body use="literal"/>
+</wsdl:output>
+<wsdl:fault name="WebFaultException">
+<soap:fault name="WebFaultException" use="literal"/>
+</wsdl:fault>
+</wsdl:operation>
+<wsdl:operation name="ping">
+<soap:operation soapAction="function=ping" style="document"/>
+<wsdl:input name="ping">
+<soap:body use="literal"/>
+</wsdl:input>
+<wsdl:output name="pingResponse">
+<soap:body use="literal"/>
+</wsdl:output>
+<wsdl:fault name="WebFaultException">
+<soap:fault name="WebFaultException" use="literal"/>
+</wsdl:fault>
+</wsdl:operation>
+<wsdl:operation name="getTaskInfo">
+<soap:operation soapAction="function=getTaskInfo" style="document"/>
+<wsdl:input name="getTaskInfo">
+<soap:header message="ns1:getTaskInfo" part="SessionId" use="literal"> </soap:header>
+<soap:body parts="taskInfoResponse" use="literal"/>
+</wsdl:input>
+<wsdl:output name="getTaskInfoResponse">
+<soap:body use="literal"/>
+</wsdl:output>
+<wsdl:fault name="WebFaultException">
+<soap:fault name="WebFaultException" use="literal"/>
+</wsdl:fault>
+</wsdl:operation>
+<wsdl:operation name="cancelTask">
+<soap:operation soapAction="function=cancelTask" style="document"/>
+<wsdl:input name="cancelTask">
+<soap:header message="ns1:cancelTask" part="SessionId" use="literal"> </soap:header>
+<soap:body parts="CancelTaskRequest" use="literal"/>
+</wsdl:input>
+<wsdl:output name="cancelTaskResponse">
+<soap:body use="literal"/>
+</wsdl:output>
+<wsdl:fault name="WebFaultException">
+<soap:fault name="WebFaultException" use="literal"/>
+</wsdl:fault>
+</wsdl:operation>
+<wsdl:operation name="getTaskLogs">
+<soap:operation soapAction="function=getTaskLogs" style="document"/>
+<wsdl:input name="getTaskLogs">
+<soap:header message="ns1:getTaskLogs" part="SessionId" use="literal"> </soap:header>
+<soap:body parts="TaskLogsRequest" use="literal"/>
+</wsdl:input>
+<wsdl:output name="getTaskLogsResponse">
+<soap:body use="literal"/>
+</wsdl:output>
+<wsdl:fault name="WebFaultException">
+<soap:fault name="WebFaultException" use="literal"/>
+</wsdl:fault>
+</wsdl:operation>
+<wsdl:operation name="runTask">
+<soap:operation soapAction="function=runTask" style="document"/>
+<wsdl:input name="runTask">
+<soap:header message="ns1:runTask" part="SessionId" use="literal"> </soap:header>
+<soap:body parts="TaskInfo" use="literal"/>
+</wsdl:input>
+<wsdl:output name="runTaskResponse">
+<soap:body use="literal"/>
+</wsdl:output>
+<wsdl:fault name="WebFaultException">
+<soap:fault name="WebFaultException" use="literal"/>
+</wsdl:fault>
+</wsdl:operation>
+<wsdl:operation name="logout">
+<soap:operation soapAction="function=logoff" style="document"/>
+<wsdl:input name="logout">
+<soap:body use="literal"/>
+</wsdl:input>
+<wsdl:output name="logoutResponse">
+<soap:body use="literal"/>
+</wsdl:output>
+<wsdl:fault name="WebFaultException">
+<soap:fault name="WebFaultException" use="literal"/>
+</wsdl:fault>
+</wsdl:operation>
+<wsdl:operation name="getTaskStatusByRunId2">
+<soap:operation soapAction="function=getTaskStatusByRunId2" style="document"/>
+<wsdl:input name="getTaskStatusByRunId2">
+<soap:header message="ns1:getTaskStatusByRunId2" part="SessionId" use="literal"> </soap:header>
+<soap:header message="ns1:getTaskStatusByRunId2" part="Version" use="literal"> </soap:header>
+<soap:body parts="TaskStatusRequest" use="literal"/>
+</wsdl:input>
+<wsdl:output name="getTaskStatusByRunId2Response">
+<soap:body use="literal"/>
+</wsdl:output>
+<wsdl:fault name="WebFaultException">
+<soap:fault name="WebFaultException" use="literal"/>
+</wsdl:fault>
+</wsdl:operation>
+<wsdl:operation name="getAllExecutedTasks">
+<soap:operation soapAction="function=getAllExecutedTasks" style="document"/>
+<wsdl:input name="getAllExecutedTasks">
+<soap:header message="ns1:getAllExecutedTasks" part="SessionId" use="literal"> </soap:header>
+<soap:body parts="ExecutedTaskFilterRequest" use="literal"/>
+</wsdl:input>
+<wsdl:output name="getAllExecutedTasksResponse">
+<soap:body use="literal"/>
+</wsdl:output>
+<wsdl:fault name="WebFaultException">
+<soap:fault name="WebFaultException" use="literal"/>
+</wsdl:fault>
+</wsdl:operation>
+<wsdl:operation name="getAllExecutedTasks2">
+<soap:operation soapAction="function=getAllExecutedTasks2" style="document"/>
+<wsdl:input name="getAllExecutedTasks2">
+<soap:header message="ns1:getAllExecutedTasks2" part="SessionId" use="literal"> </soap:header>
+<soap:header message="ns1:getAllExecutedTasks2" part="Version" use="literal"> </soap:header>
+<soap:body parts="ExecutedTaskFilterRequest" use="literal"/>
+</wsdl:input>
+<wsdl:output name="getAllExecutedTasks2Response">
+<soap:body use="literal"/>
+</wsdl:output>
+<wsdl:fault name="WebFaultException">
+<soap:fault name="WebFaultException" use="literal"/>
+</wsdl:fault>
+</wsdl:operation>
+<wsdl:operation name="getAgents">
+<soap:operation soapAction="function=getAllAgents" style="document"/>
+<wsdl:input name="getAgents">
+<soap:header message="ns1:getAgents" part="SessionId" use="literal"> </soap:header>
+<soap:body parts="AllAgentsRequest" use="literal"/>
+</wsdl:input>
+<wsdl:output name="getAgentsResponse">
+<soap:body use="literal"/>
+</wsdl:output>
+<wsdl:fault name="WebFaultException">
+<soap:fault name="WebFaultException" use="literal"/>
+</wsdl:fault>
+</wsdl:operation>
+<wsdl:operation name="getTaskStatusByRunId">
+<soap:operation soapAction="function=getTaskStatusByRunId" style="document"/>
+<wsdl:input name="getTaskStatusByRunId">
+<soap:header message="ns1:getTaskStatusByRunId" part="SessionId" use="literal"> </soap:header>
+<soap:body parts="TaskStatusRequest" use="literal"/>
+</wsdl:input>
+<wsdl:output name="getTaskStatusByRunIdResponse">
+<soap:body use="literal"/>
+</wsdl:output>
+<wsdl:fault name="WebFaultException">
+<soap:fault name="WebFaultException" use="literal"/>
+</wsdl:fault>
+</wsdl:operation>
+<wsdl:operation name="searchTasks">
+<soap:operation soapAction="function=searchTasks" style="document"/>
+<wsdl:input name="searchTasks">
+<soap:header message="ns1:searchTasks" part="SessionId" use="literal"> </soap:header>
+<soap:body parts="searchTasksRequest" use="literal"/>
+</wsdl:input>
+<wsdl:output name="searchTasksResponse">
+<soap:body use="literal"/>
+</wsdl:output>
+<wsdl:fault name="WebFaultException">
+<soap:fault name="WebFaultException" use="literal"/>
+</wsdl:fault>
+</wsdl:operation>
+</wsdl:binding>
+<wsdl:service name="DSoD_Services">
+<wsdl:port binding="tns:DSoD_ServicesSoapBinding" name="DSoDServicesPort">
+<soap:address location="https://hcids3.us3.hana.ondemand.com/DSoD/webservices"/>
+</wsdl:port>
+</wsdl:service>
+</wsdl:definitions>
