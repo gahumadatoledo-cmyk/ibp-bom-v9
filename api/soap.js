@@ -147,7 +147,7 @@ function buildBody(operation, params = {}) {
       return `<web:taskInfoResponse><taskGuid>${xe(params.taskGuid)}</taskGuid></web:taskInfoResponse>`
 
     case 'getAgents':
-      return `<web:AllAgentsRequest><activeOnly>${params.activeOnly ? 'true' : 'false'}</activeOnly></web:AllAgentsRequest>`
+      return `<web:allAgentsRequest><activeOnly>${params.activeOnly ? 'true' : 'false'}</activeOnly></web:allAgentsRequest>`
 
     case 'getSystemConfigurations':
       return `<web:AllSystemConfigurationsRequest/>`

@@ -48,7 +48,7 @@ WSDL completo en `docs/service.wsdl`. Namespace: `http://webservices.dsod.sap.co
 | getProjects             | `function=getAllProjects`         | `AllProjectsRequest`             | SessionId      |
 | getProjectTasks         | `function=getAllProjectTasks`     | `AllProjectTasksRequest`         | SessionId      |
 | getSystemConfigurations | `function=getAllSystemConfigurations` | `AllSystemConfigurationsRequest` | SessionId   |
-| getAgents               | `function=getAllAgents`           | `AllAgentsRequest`               | SessionId      |
+| getAgents               | `function=getAllAgents`           | `allAgentsRequest`               | SessionId      |
 | searchTasks             | `function=searchTasks`            | `searchTasksRequest`             | SessionId      |
 | getTaskInfo             | `function=getTaskInfo`            | `taskInfoResponse` (*)           | SessionId      |
 | runTask                 | `function=runTask`                | `TaskInfo`                       | SessionId      |
