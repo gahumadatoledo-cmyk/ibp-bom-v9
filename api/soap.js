@@ -135,10 +135,10 @@ function buildBody(operation, params = {}) {
       return `<web:logoutRequest><SessionID>${xe(params.sessionId)}</SessionID></web:logoutRequest>`
 
     case 'getProjects':
-      return `<web:AllProjectsRequest/>`
+      return `<web:allProjectsRequest/>`
 
     case 'getProjectTasks':
-      return `<web:AllProjectTasksRequest><projectGuid>${xe(params.projectGuid)}</projectGuid></web:AllProjectTasksRequest>`
+      return `<web:allProjectTasksRequest><projectGuid>${xe(params.projectGuid)}</projectGuid></web:allProjectTasksRequest>`
 
     case 'searchTasks':
       return `<web:searchTasksRequest><nameFilter>${xe(params.nameFilter || '')}</nameFilter></web:searchTasksRequest>`
@@ -150,24 +150,24 @@ function buildBody(operation, params = {}) {
       return `<web:allAgentsRequest><activeOnly>${params.activeOnly ? 'true' : 'false'}</activeOnly></web:allAgentsRequest>`
 
     case 'getSystemConfigurations':
-      return `<web:AllSystemConfigurationsRequest/>`
+      return `<web:allSystemConfigurationsRequest/>`
 
     case 'runTask': {
       const vars = (params.globalVariables || [])
         .map(v => `<variable name="${xe(v.name)}">${xe(v.value)}</variable>`)
         .join('\n      ')
-      return `<web:TaskInfo>
+      return `<web:taskInfo>
         <taskName>${xe(params.taskName)}</taskName>
         <description>${xe(params.description || '')}</description>
         ${params.agentName  ? `<agentName>${xe(params.agentName)}</agentName>` : ''}
         ${params.agentGroup ? `<agentGroup>${xe(params.agentGroup)}</agentGroup>` : ''}
         ${params.profileName ? `<profileName>${xe(params.profileName)}</profileName>` : ''}
         ${vars ? `<globalVariables>${vars}</globalVariables>` : ''}
-      </web:TaskInfo>`
+      </web:taskInfo>`
     }
 
     case 'getTaskStatusByRunId2':
-      return `<web:TaskStatusRequest><runId>${xe(params.runId)}</runId></web:TaskStatusRequest>`
+      return `<web:taskStatusRequest><runId>${xe(params.runId)}</runId></web:taskStatusRequest>`
 
     case 'getAllExecutedTasks2': {
       const startFrom = params.startDateFrom
@@ -188,17 +188,17 @@ function buildBody(operation, params = {}) {
       const logBlock = (name, p) => p?.getLog
         ? `<${name}><getLog>true</getLog><pageNum>${p.pageNum || 1}</pageNum></${name}>`
         : ''
-      return `<web:TaskLogsRequest>
+      return `<web:taskLogsRequest>
         <runID>${xe(params.runId)}</runID>
         <base64Encode>${params.base64Encode !== false ? 'true' : 'false'}</base64Encode>
         ${logBlock('traceLog',   params.traceLog)}
         ${logBlock('monitorLog', params.monitorLog)}
         ${logBlock('errorLog',   params.errorLog)}
-      </web:TaskLogsRequest>`
+      </web:taskLogsRequest>`
     }
 
     case 'cancelTask':
-      return `<web:CancelTaskRequest><runId>${xe(params.runId)}</runId></web:CancelTaskRequest>`
+      return `<web:cancelTaskRequest><runId>${xe(params.runId)}</runId></web:cancelTaskRequest>`
 
     default:
       throw new Error(`Unknown operation: ${operation}`)
