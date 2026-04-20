@@ -172,13 +172,13 @@ function buildBody(operation, params = {}) {
       const endFrom = params.endDateFrom
         ? `<endDate><from>${xe(params.endDateFrom)}</from>${params.endDateTo ? `<to>${xe(params.endDateTo)}</to>` : ''}</endDate>`
         : ''
-      return `<web:getAllExecutedTasks2Request>
+      return `<web:executedTaskFilterRequest>
         <version>2.0</version>
         ${params.taskName   ? `<taskName>${xe(params.taskName)}</taskName>` : ''}
         ${startFrom}
         ${endFrom}
         ${params.statusCode ? `<statusCode>${xe(params.statusCode)}</statusCode>` : ''}
-      </web:getAllExecutedTasks2Request>`
+      </web:executedTaskFilterRequest>`
     }
 
     case 'getTaskLogs': {
