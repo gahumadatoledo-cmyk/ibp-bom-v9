@@ -2,12 +2,14 @@ import { useState } from 'react'
 import Tasks from '../Tasks/Tasks'
 import TaskMonitor from '../Tasks/TaskMonitor'
 import Resumen from '../Resumen/Resumen'
+import Orchestrations from '../Orchestrations/Orchestrations'
 import ConnectionAvatar from '../Connections/ConnectionAvatar'
 
 const TABS = [
-  { id: 'resumen',  label: 'Resumen'          },
-  { id: 'tasks',    label: 'Projects & Tasks'  },
-  { id: 'monitor',  label: 'Task Monitor'      },
+  { id: 'resumen',        label: 'Resumen'          },
+  { id: 'tasks',          label: 'Projects & Tasks'  },
+  { id: 'monitor',        label: 'Task Monitor'      },
+  { id: 'orchestrations', label: 'Orchestrations'    },
 ]
 
 export default function SystemView({ connection }) {
@@ -47,9 +49,10 @@ export default function SystemView({ connection }) {
 
       {/* Content */}
       <div style={{ flex: 1, overflow: 'auto' }}>
-        {activeTab === 'resumen' && <Resumen    connection={connection} />}
-        {activeTab === 'tasks'   && <Tasks      connection={connection} />}
-        {activeTab === 'monitor' && <TaskMonitor connection={connection} />}
+        {activeTab === 'resumen'        && <Resumen         connection={connection} />}
+        {activeTab === 'tasks'          && <Tasks            connection={connection} />}
+        {activeTab === 'monitor'        && <TaskMonitor      connection={connection} />}
+        {activeTab === 'orchestrations' && <Orchestrations   connection={connection} />}
       </div>
     </div>
   )

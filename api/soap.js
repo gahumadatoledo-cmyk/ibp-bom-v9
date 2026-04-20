@@ -351,6 +351,9 @@ function parseResponse(operation, xml) {
   }
 }
 
+// ─── Named exports for internal reuse ────────────────────────────────────────
+export { redisGet, decrypt, xe, parseFault, buildEnvelope, soapCall, logon, buildBody, parseResponse }
+
 // ─── Main handler ─────────────────────────────────────────────────────────────
 
 export default async function handler(req, res) {
