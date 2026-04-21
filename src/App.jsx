@@ -93,6 +93,15 @@ export default function App() {
           {renderMain()}
         </main>
       </div>
+
+      <div style={{
+        position: 'fixed', bottom: 10, right: 14,
+        fontSize: 10, color: 'var(--text2)', opacity: 0.45,
+        fontFamily: 'monospace', pointerEvents: 'none', userSelect: 'none',
+        zIndex: 9999,
+      }}>
+        v0.4.7
+      </div>
     </>
   )
 }
