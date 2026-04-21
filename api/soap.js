@@ -129,7 +129,7 @@ function buildBody(operation, params = {}) {
   switch (operation) {
 
     case 'ping':
-      return `<web:pingRequest><SessionID>${xe(params.sessionId)}</SessionID></web:pingRequest>`
+      return `<web:pingRequest/>`
 
     case 'logout':
       return `<web:logoutRequest><SessionID>${xe(params.sessionId)}</SessionID></web:logoutRequest>`
