@@ -220,14 +220,14 @@ function parseResponse(operation, xml) {
       return { message: xmlVal(xml, 'LogoutMessage') || xmlVal(xml, 'logoutMessage') }
 
     case 'getProjects':
-      return xmlAll(xml, 'return').map(p => ({
+      return xmlAll(xml, 'projects').map(p => ({
         name:        xmlVal(p, 'name'),
         guid:        xmlVal(p, 'guid'),
         description: xmlVal(p, 'description'),
       }))
 
     case 'getProjectTasks':
-      return xmlAll(xml, 'return').map(t => ({
+      return xmlAll(xml, 'tasks').map(t => ({
         taskName:    xmlVal(t, 'taskName'),
         description: xmlVal(t, 'description'),
         taskGuid:    xmlVal(t, 'taskGuid'),
@@ -418,8 +418,7 @@ export default async function handler(req, res) {
     }
 
     const result = parseResponse(operation, text)
-    const isEmpty = Array.isArray(result) && result.length === 0
-    return res.json(isEmpty ? { _data: result, _rawXml: text.slice(0, 3000) } : result)
+    return res.json(result)
 
   } catch (e) {
     return res.status(500).json({ error: e.message })
