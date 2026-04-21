@@ -398,6 +398,11 @@ export default async function handler(req, res) {
     // Logon to get SessionID
     const sessionId = await logon(serviceUrl, orgName, user, password, isProduction)
 
+    // ping = logon-only test; if logon succeeded the connection is alive
+    if (operation === 'ping') {
+      return res.json({ message: 'Conexión exitosa' })
+    }
+
     // Build and execute operation
     const body = buildBody(operation, params)
     const envelope = buildEnvelope(body, sessionId, version)
