@@ -53,7 +53,6 @@ function validateStep(s) {
     throw new Error('errorStrategy debe ser: stop, continue o retry')
   }
   const maxR = Number(s.maxRetries ?? 0)
-  if (maxR < 0 || maxR > 5) throw new Error('maxRetries debe estar entre 0 y 5')
   return {
     id:              s.id || crypto.randomUUID(),
     taskName:        s.taskName.trim(),
@@ -66,6 +65,40 @@ function validateStep(s) {
     maxRetries:      Math.min(5, Math.max(0, Math.trunc(maxR))),
     retryDelaySec:   Math.min(3600, Math.max(0, Number(s.retryDelaySec ?? 30))),
   }
+}
+
+function validateNodeData(data = {}) {
+  return {
+    taskName:        data.taskName        || null,
+    label:           data.label           || data.taskName || 'Sin nombre',
+    agentName:       data.agentName       || null,
+    profileName:     data.profileName     || null,
+    globalVariables: Array.isArray(data.globalVariables) ? data.globalVariables : [],
+    errorStrategy:   VALID_STRATEGIES.has(data.errorStrategy) ? data.errorStrategy : 'stop',
+    maxRetries:      Math.min(5, Math.max(0, Number(data.maxRetries ?? 0))),
+    retryDelaySec:   Math.min(3600, Math.max(0, Number(data.retryDelaySec ?? 30))),
+    children:        Array.isArray(data.children) ? data.children : [],
+    runStatus:       undefined, // never persist transient run state in node data
+  }
+}
+
+function validateNode(n) {
+  if (!n.id) throw new Error('Cada nodo requiere id')
+  if (!['task', 'group'].includes(n.type)) throw new Error(`Tipo de nodo inválido: ${n.type}`)
+  return {
+    id:       n.id,
+    type:     n.type,
+    position: { x: Number(n.position?.x ?? 0), y: Number(n.position?.y ?? 0) },
+    style:    n.style || undefined,
+    parentId: n.parentId || undefined,
+    extent:   n.parentId ? 'parent' : undefined,
+    data:     validateNodeData(n.data || {}),
+  }
+}
+
+function validateEdge(e) {
+  if (!e.id || !e.source || !e.target) throw new Error('Cada edge requiere id, source y target')
+  return { id: e.id, source: e.source, target: e.target }
 }
 
 // ─── Handler ──────────────────────────────────────────────────────────────────
@@ -88,20 +121,21 @@ export default async function handler(req, res) {
 
     // ── POST: create ──────────────────────────────────────────────────────────
     if (req.method === 'POST') {
-      const { connectionId, name, steps = [] } = req.body || {}
-      if (!connectionId)   return res.status(400).json({ error: 'connectionId requerido' })
-      if (!name?.trim())   return res.status(400).json({ error: 'name requerido' })
+      const { connectionId, name, steps = [], nodes = [], edges = [] } = req.body || {}
+      if (!connectionId) return res.status(400).json({ error: 'connectionId requerido' })
+      if (!name?.trim()) return res.status(400).json({ error: 'name requerido' })
       const connections = await redisGetArr(CONN_KEY)
       if (!connections.find(c => c.id === connectionId)) {
         return res.status(404).json({ error: 'Conexión no encontrada' })
       }
-      const validatedSteps = steps.map(validateStep)
       const now = new Date().toISOString()
       const orch = {
         id: crypto.randomUUID(),
         connectionId,
         name: name.trim(),
-        steps: validatedSteps,
+        nodes: nodes.map(validateNode),
+        edges: edges.map(validateEdge),
+        steps: steps.map(validateStep), // legacy compat
         createdAt: now,
         updatedAt: now,
       }
@@ -110,16 +144,18 @@ export default async function handler(req, res) {
       return res.status(201).json(orch)
     }
 
-    // ── PUT: update name / steps ──────────────────────────────────────────────
+    // ── PUT: update name / nodes / edges ──────────────────────────────────────
     if (req.method === 'PUT') {
-      const { id, name, steps } = req.body || {}
+      const { id, name, steps, nodes, edges } = req.body || {}
       if (!id) return res.status(400).json({ error: 'id requerido' })
       const all = await redisGetArr(KEY)
       const idx = all.findIndex(o => o.id === id)
       if (idx === -1) return res.status(404).json({ error: 'Orquestación no encontrada' })
       const updated = { ...all[idx], updatedAt: new Date().toISOString() }
-      if (name    !== undefined) updated.name  = name.trim()
-      if (steps   !== undefined) updated.steps = steps.map(validateStep)
+      if (name  !== undefined) updated.name  = name.trim()
+      if (nodes !== undefined) updated.nodes = nodes.map(validateNode)
+      if (edges !== undefined) updated.edges = edges.map(validateEdge)
+      if (steps !== undefined) updated.steps = steps.map(validateStep)
       all[idx] = updated
       await redisSet(KEY, all)
       return res.json(updated)

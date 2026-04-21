@@ -1,0 +1,91 @@
+import { Handle, Position } from '@xyflow/react'
+import { STATUS_COLORS, STATUS_ICONS } from '../canvasUtils'
+
+const STRATEGY_COLOR = { stop: '#ff6b6b', continue: '#fbbf24', retry: '#3b82f6' }
+
+export default function TaskNode({ data, selected, id }) {
+  const status  = data.runStatus || 'pending'
+  const color   = STATUS_COLORS[status]
+  const icon    = STATUS_ICONS[status]
+  const isActive = status === 'running'
+
+  return (
+    <div
+      onClick={() => data.onSelect?.(id)}
+      style={{
+        width: 210, background: 'var(--bg2)',
+        border: `1.5px solid ${selected ? 'var(--accent)' : isActive ? '#3b82f6' : 'var(--border2)'}`,
+        borderRadius: 10, overflow: 'hidden', cursor: 'pointer',
+        boxShadow: selected ? '0 0 0 2px rgba(247,168,0,.25)' : isActive ? '0 0 0 2px rgba(59,130,246,.2)' : 'none',
+        transition: 'border-color .2s, box-shadow .2s',
+        userSelect: 'none',
+      }}
+    >
+      {/* Status bar */}
+      <div style={{
+        height: 3,
+        background: color,
+        transition: 'background .3s',
+        ...(isActive ? { animation: 'shimmer 1.5s infinite' } : {}),
+      }} />
+
+      {/* Header */}
+      <div style={{
+        padding: '8px 10px 6px',
+        background: 'var(--bg3)',
+        display: 'flex', alignItems: 'center', gap: 6,
+      }}>
+        <span style={{ fontSize: 11, color, fontWeight: 700, flexShrink: 0, fontFamily: 'var(--mono)' }}>
+          {icon}
+        </span>
+        <span style={{
+          fontSize: 11, fontWeight: 700, color: 'var(--text)',
+          flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        }} title={data.taskName}>
+          {data.label || data.taskName}
+        </span>
+      </div>
+
+      {/* Details */}
+      <div style={{ padding: '6px 10px 8px', display: 'flex', flexDirection: 'column', gap: 3 }}>
+        {(data.agentName || data.profileName) && (
+          <div style={{ fontSize: 9, color: 'var(--text3)', fontFamily: 'var(--mono)', display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+            {data.agentName   && <span>agent: {data.agentName}</span>}
+            {data.profileName && <span>profile: {data.profileName}</span>}
+          </div>
+        )}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span style={{
+            fontSize: 8, padding: '1px 5px', borderRadius: 6, fontFamily: 'var(--mono)',
+            background: (STRATEGY_COLOR[data.errorStrategy] || '#64748b') + '22',
+            color: STRATEGY_COLOR[data.errorStrategy] || '#64748b',
+            border: `1px solid ${(STRATEGY_COLOR[data.errorStrategy] || '#64748b')}44`,
+          }}>
+            {data.errorStrategy || 'stop'}
+            {data.errorStrategy === 'retry' && data.maxRetries ? ` ×${data.maxRetries}` : ''}
+          </span>
+          {data.sapRunId && (
+            <span style={{ fontSize: 9, color: '#3b82f6', fontFamily: 'var(--mono)' }}>
+              #{String(data.sapRunId).slice(-6)}
+            </span>
+          )}
+        </div>
+        {data.error && (
+          <div style={{ fontSize: 9, color: 'var(--red)', fontFamily: 'var(--mono)', wordBreak: 'break-all' }}>
+            {data.error}
+          </div>
+        )}
+      </div>
+
+      {/* Handles */}
+      <Handle
+        type="target" position={Position.Left}
+        style={{ background: 'var(--border2)', width: 8, height: 8, border: '1.5px solid var(--text3)' }}
+      />
+      <Handle
+        type="source" position={Position.Right}
+        style={{ background: 'var(--accent)', width: 8, height: 8, border: '1.5px solid #c98800' }}
+      />
+    </div>
+  )
+}
