@@ -418,7 +418,8 @@ export default async function handler(req, res) {
     }
 
     const result = parseResponse(operation, text)
-    return res.json(result)
+    const isEmpty = Array.isArray(result) && result.length === 0
+    return res.json(isEmpty ? { _data: result, _rawXml: text.slice(0, 3000) } : result)
 
   } catch (e) {
     return res.status(500).json({ error: e.message })

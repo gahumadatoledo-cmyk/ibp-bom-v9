@@ -30,8 +30,11 @@ export default function Tasks({ connection }) {
     const start = performance.now()
     try {
       const data = await soapCall(connection.id, 'getProjects')
-      addLog({ method: 'POST', path: 'getProjects', status: 200, duration: Math.round(performance.now() - start), detail: `${data.length} proyectos` })
-      setProjects(Array.isArray(data) ? data : [])
+      // Debug: backend wraps empty arrays with _rawXml for diagnosis
+      const projects = Array.isArray(data) ? data : (data._data || [])
+      const rawXml = data._rawXml || null
+      addLog({ method: 'POST', path: 'getProjects', status: 200, duration: Math.round(performance.now() - start), detail: projects.length > 0 ? `${projects.length} proyectos` : `0 proyectos${rawXml ? ' · XML: ' + rawXml : ''}` })
+      setProjects(projects)
     } catch (e) {
       addLog({ method: 'POST', path: 'getProjects', status: 0, duration: Math.round(performance.now() - start), detail: e.message })
       setError(e.message)

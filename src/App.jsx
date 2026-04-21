@@ -100,7 +100,7 @@ export default function App() {
         fontFamily: 'monospace', pointerEvents: 'none', userSelect: 'none',
         zIndex: 9999,
       }}>
-        v0.4.7
+        v{__APP_VERSION__}
       </div>
     </>
   )
