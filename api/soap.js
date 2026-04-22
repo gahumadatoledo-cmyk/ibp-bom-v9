@@ -38,13 +38,13 @@ function decrypt(text) {
 
 /** Extract the inner text of the first matching tag (namespace-agnostic) */
 function xmlVal(xml, tag) {
-  const m = xml.match(new RegExp(`<(?:[\\w]+:)?${tag}[^>]*>([\\s\\S]*?)<\\/(?:[\\w]+:)?${tag}>`, 'i'))
+  const m = xml.match(new RegExp(`<(?:[\\w]+:)?${tag}(?:\\s[^>]*)?>([\\s\\S]*?)<\\/(?:[\\w]+:)?${tag}>`, 'i'))
   return m ? m[1].trim() : null
 }
 
 /** Extract all occurrences of a tag as an array of raw XML strings */
 function xmlAll(xml, tag) {
-  const re = new RegExp(`<(?:[\\w]+:)?${tag}[^>]*>[\\s\\S]*?<\\/(?:[\\w]+:)?${tag}>`, 'gi')
+  const re = new RegExp(`<(?:[\\w]+:)?${tag}(?:\\s[^>]*)?>[\\s\\S]*?<\\/(?:[\\w]+:)?${tag}>`, 'gi')
   return [...xml.matchAll(re)].map(m => m[0])
 }
 
