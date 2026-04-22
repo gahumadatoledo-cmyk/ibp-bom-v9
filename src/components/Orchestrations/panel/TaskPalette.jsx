@@ -168,7 +168,7 @@ export default function TaskPalette({ connection, onAddGroup, collapsed = false,
                 onMouseEnter={e => { if (!isExp) e.currentTarget.style.background = 'var(--bg3)' }}
                 onMouseLeave={e => { if (!isExp) e.currentTarget.style.background = 'transparent' }}
               >
-                <span style={{ color: 'var(--text3)', fontSize: 10, width: 12, textAlign: 'center', flexShrink: 0 }}>
+                <span style={{ color: 'var(--text3)', fontSize: 24, width: 12, textAlign: 'center', flexShrink: 0 }}>
                   {isLoadingT ? '…' : isExp ? '▾' : '▸'}
                 </span>
                 <span style={{
