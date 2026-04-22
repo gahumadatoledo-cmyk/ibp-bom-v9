@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 
 async function soapCall(connectionId, operation, params = {}) {
   const res = await fetch('/api/soap', {
@@ -57,6 +57,25 @@ export default function TaskPalette({ connection, onAddGroup, collapsed = false,
   const [loadingP, setLoadingP]     = useState(true)
   const [loadingT, setLoadingT]     = useState({})
   const [search, setSearch]         = useState('')
+  const [width, setWidth]           = useState(210)
+  const dragRef = useRef({ active: false, startX: 0, startW: 0 })
+
+  function onResizeStart(e) {
+    e.preventDefault()
+    dragRef.current = { active: true, startX: e.clientX, startW: width }
+    function onMove(e) {
+      if (!dragRef.current.active) return
+      const next = Math.max(160, Math.min(520, dragRef.current.startW + e.clientX - dragRef.current.startX))
+      setWidth(next)
+    }
+    function onUp() {
+      dragRef.current.active = false
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('mouseup', onUp)
+    }
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', onUp)
+  }
 
   useEffect(() => {
     soapCall(connection.id, 'getProjects')
@@ -112,10 +131,22 @@ export default function TaskPalette({ connection, onAddGroup, collapsed = false,
 
   return (
     <div style={{
-      width: 210, flexShrink: 0, borderRight: '1px solid var(--border)',
+      width, flexShrink: 0, position: 'relative',
+      borderRight: '1px solid var(--border)',
       display: 'flex', flexDirection: 'column', background: 'var(--bg2)',
       overflow: 'hidden',
     }}>
+      {/* Resize handle */}
+      <div
+        onMouseDown={onResizeStart}
+        style={{
+          position: 'absolute', top: 0, right: 0, width: 4, height: '100%',
+          cursor: 'col-resize', zIndex: 10,
+          background: 'transparent',
+        }}
+        onMouseEnter={e => e.currentTarget.style.background = 'var(--accent)'}
+        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+      />
       {/* Header */}
       <div style={{ padding: '10px 12px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
