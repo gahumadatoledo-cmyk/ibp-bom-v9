@@ -176,7 +176,7 @@ export default function TaskPalette({ connection, onAddGroup }) {
             fontSize: 11, fontWeight: 600, cursor: 'pointer',
           }}
         >
-          + Grupo paralelo
+          + Nuevo grupo
         </button>
       </div>
     </div>

@@ -97,6 +97,17 @@ function CanvasInner({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [run])
 
+  // Recompute hasInternalEdges for group nodes whenever edges change
+  useEffect(() => {
+    setNodes(nds => nds.map(n => {
+      if (n.type !== 'orchGroup') return n
+      const has = edges.some(e => nds.some(c => c.id === e.source && c.parentId === n.id))
+      if (n.data.hasInternalEdges === has) return n
+      return { ...n, data: { ...n.data, hasInternalEdges: has } }
+    }))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [edges])
+
   function handleNodeSelect(nodeId) { onNodeSelect(nodeId) }
 
   function debounced_save(nds, eds) {
