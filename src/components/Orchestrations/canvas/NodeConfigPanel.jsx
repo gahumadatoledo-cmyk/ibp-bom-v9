@@ -56,7 +56,6 @@ function DropdownOrText({ value, options, loading, emptyLabel, placeholder, onCh
 function initForm(data) {
   return {
     label:           data.label         || '',
-    executionMode:   data.executionMode || 'parallel',
     agentName:       data.agentName     || '',
     profileName:     data.profileName   || '',
     errorStrategy:   data.errorStrategy || 'stop',
@@ -125,7 +124,6 @@ export default function NodeConfigPanel({ node, connection, onUpdate, onClose })
     setSaving(true)
     const update = {
       label:           form.label || node.data.taskName || 'Sin nombre',
-      executionMode:   form.executionMode,
       agentName:       form.agentName  || null,
       profileName:     form.profileName || null,
       errorStrategy:   form.errorStrategy,
@@ -175,33 +173,12 @@ export default function NodeConfigPanel({ node, connection, onUpdate, onClose })
           />
         </Field>
 
-        {/* Grupo: modo de ejecución */}
+        {/* Grupo: info de ejecución */}
         {isGroup && (
-          <Field label="Modo de ejecución interna">
-            <div style={{ display: 'flex', gap: 8 }}>
-              {['parallel', 'serial'].map(mode => {
-                const active = form.executionMode === mode
-                const label  = mode === 'parallel' ? '⊞ Paralelo' : '→ Serial'
-                const color  = mode === 'parallel' ? '#29ABE2' : '#F7A800'
-                return (
-                  <button key={mode} onClick={() => patch('executionMode', mode)} style={{
-                    flex: 1, padding: '6px', borderRadius: 6, fontSize: 11, fontWeight: 600,
-                    border: `1px solid ${active ? color + '44' : 'var(--border)'}`,
-                    background: active ? color + '22' : 'var(--bg3)',
-                    color: active ? color : 'var(--text2)',
-                    cursor: 'pointer',
-                  }}>
-                    {label}
-                  </button>
-                )
-              })}
-            </div>
-            <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 5, lineHeight: 1.4 }}>
-              {form.executionMode === 'parallel'
-                ? 'Todas las tasks del grupo se lanzan simultáneamente.'
-                : 'Las tasks del grupo se ejecutan de una en una, en orden.'}
-            </div>
-          </Field>
+          <div style={{ marginBottom: 12, padding: '8px 10px', borderRadius: 6, background: 'var(--bg3)', border: '1px solid var(--border)', fontSize: 10, color: 'var(--text3)', lineHeight: 1.5 }}>
+            El orden de ejecución dentro del grupo lo determinan los edges entre sus tasks.<br />
+            Sin edges → paralelo · Con edges → en secuencia
+          </div>
         )}
 
         {/* Task: agente, perfil, estrategia */}

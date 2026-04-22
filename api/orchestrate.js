@@ -63,11 +63,10 @@ async function soapRequest(connectionId, operation, params) {
 // ─── Graph utilities ──────────────────────────────────────────────────────────
 
 // Kahn's algorithm: returns array of waves (each wave = nodeIds that can run in parallel)
-function buildWaves(nodes, edges) {
-  const topLevel = nodes.filter(n => !n.parentId)
-  const inDegree = {}
-  const adjList  = {}
-  for (const n of topLevel) { inDegree[n.id] = 0; adjList[n.id] = [] }
+// nodeList must be pre-filtered (top-level or group children, never mixed)
+function buildWaves(nodeList, edges) {
+  const inDegree = {}, adjList = {}
+  for (const n of nodeList) { inDegree[n.id] = 0; adjList[n.id] = [] }
   for (const e of edges) {
     if (e.source in adjList && e.target in inDegree) {
       adjList[e.source].push(e.target)
@@ -75,15 +74,11 @@ function buildWaves(nodes, edges) {
     }
   }
   const waves = []
-  let ready = topLevel.filter(n => inDegree[n.id] === 0).map(n => n.id)
+  let ready = nodeList.filter(n => inDegree[n.id] === 0).map(n => n.id)
   while (ready.length > 0) {
     waves.push([...ready])
     const next = []
-    for (const id of ready) {
-      for (const d of adjList[id]) {
-        if (--inDegree[d] === 0) next.push(d)
-      }
-    }
+    for (const id of ready) for (const d of adjList[id]) if (--inDegree[d] === 0) next.push(d)
     ready = next
   }
   return waves
@@ -123,6 +118,7 @@ function initNodeState(node, allNodes) {
     return {
       nodeId: node.id, type: 'group', status: 'pending',
       startedAt: null, finishedAt: null, error: null,
+      groupWaves: [], currentGroupWave: 0,
       children: Object.fromEntries(children.map(c => [c.id, {
         nodeId: c.id, status: 'pending', sapRunId: null, sapStatusCode: null,
         startedAt: null, finishedAt: null, error: null, retryCount: 0, retryAt: null,
@@ -154,9 +150,23 @@ async function pollSapStatus(connectionId, sapRunId) {
   return (r.statusCode || '').toUpperCase()
 }
 
+// ─── Group wave helper ────────────────────────────────────────────────────────
+
+async function launchGroupWave(run, ns, waveIds, allNodes, defaults) {
+  if (!waveIds || waveIds.length === 0) return
+  await Promise.allSettled(waveIds.map(async childId => {
+    const childDef = allNodes.find(n => n.id === childId)
+    const cs = ns.children[childId]
+    if (!childDef || !cs || cs.status !== 'pending') return
+    cs.status = 'running'; cs.startedAt = new Date().toISOString()
+    try { cs.sapRunId = await launchTask(run.connectionId, childDef, defaults) }
+    catch (e) { cs.status = 'error'; cs.finishedAt = new Date().toISOString(); cs.error = e.message }
+  }))
+}
+
 // ─── Execute a wave: launch all nodes in parallel ────────────────────────────
 
-async function executeWave(run, waveIndex, allNodes) {
+async function executeWave(run, waveIndex, allNodes, allEdges) {
   const waveNodeIds = run.waves[waveIndex]
   const defaults = { agentName: run.defaultAgent, profileName: run.defaultProfile }
 
@@ -172,29 +182,17 @@ async function executeWave(run, waveIndex, allNodes) {
 
     } else if (nodeDef.type === 'group') {
       ns.status = 'running'; ns.startedAt = new Date().toISOString()
-      const children = allNodes.filter(n => n.parentId === nodeId)
-      if (children.length === 0) {
+      const groupChildren = allNodes.filter(n => n.parentId === nodeId)
+      if (groupChildren.length === 0) {
         ns.status = 'success'; ns.finishedAt = new Date().toISOString(); return
       }
-      const isSerial = nodeDef.data?.executionMode === 'serial'
-      if (isSerial) {
-        // Launch only the first pending child
-        const firstChild = children[0]
-        const cs = ns.children[firstChild.id]
-        if (cs && cs.status === 'pending') {
-          cs.status = 'running'; cs.startedAt = new Date().toISOString()
-          try { cs.sapRunId = await launchTask(run.connectionId, firstChild, defaults) }
-          catch (e) { cs.status = 'error'; cs.finishedAt = new Date().toISOString(); cs.error = e.message }
-        }
-      } else {
-        await Promise.allSettled(children.map(async child => {
-          const cs = ns.children[child.id]
-          if (!cs) return
-          cs.status = 'running'; cs.startedAt = new Date().toISOString()
-          try { cs.sapRunId = await launchTask(run.connectionId, child, defaults) }
-          catch (e) { cs.status = 'error'; cs.finishedAt = new Date().toISOString(); cs.error = e.message }
-        }))
-      }
+      const groupEdges = allEdges.filter(e =>
+        groupChildren.some(c => c.id === e.source) && groupChildren.some(c => c.id === e.target)
+      )
+      const groupWaves = buildWaves(groupChildren, groupEdges)
+      ns.groupWaves = groupWaves
+      ns.currentGroupWave = 0
+      await launchGroupWave(run, ns, groupWaves[0], allNodes, defaults)
     }
   }))
   return run
@@ -238,40 +236,35 @@ async function pollTaskNode(run, nodeId, nodeDef) {
     nodeDef.data?.retryDelaySec || 30)
 }
 
-async function pollGroupNode(run, nodeId, nodeDef, allNodes) {
+async function pollGroupNode(run, nodeId, nodeDef, allNodes, allEdges) {
   const ns = run.nodes[nodeId]
   if (!['running', 'pending'].includes(ns.status)) return
-  const children = allNodes.filter(n => n.parentId === nodeId)
-  if (children.length === 0) { ns.status = 'success'; ns.finishedAt = new Date().toISOString(); return }
+  const groupChildren = allNodes.filter(n => n.parentId === nodeId)
+  if (groupChildren.length === 0) { ns.status = 'success'; ns.finishedAt = new Date().toISOString(); return }
 
-  const isSerial = nodeDef.data?.executionMode === 'serial'
   const defaults = { agentName: run.defaultAgent, profileName: run.defaultProfile }
 
-  if (isSerial) {
-    // Find the currently active child (first non-done)
-    const activeIdx = children.findIndex(c => !DONE_NODE.has(ns.children[c.id]?.status))
-    if (activeIdx === -1) {
-      // All done
-      const anyErr = children.some(c => ns.children[c.id]?.status === 'error')
-      ns.status = anyErr ? 'error' : 'success'
-      ns.finishedAt = new Date().toISOString()
-      return
-    }
-    const child = children[activeIdx]
-    const cs = ns.children[child.id]
-    if (!cs) return
+  // Lazily initialize groupWaves for runs stored before this refactor
+  if (!ns.groupWaves || ns.groupWaves.length === 0) {
+    const groupEdges = allEdges.filter(e =>
+      groupChildren.some(c => c.id === e.source) && groupChildren.some(c => c.id === e.target)
+    )
+    ns.groupWaves = buildWaves(groupChildren, groupEdges)
+    ns.currentGroupWave = 0
+  }
 
+  const currentWaveIds = ns.groupWaves[ns.currentGroupWave]
+  if (!currentWaveIds) return
+
+  // Poll all children in current wave
+  await Promise.allSettled(currentWaveIds.map(async childId => {
+    const childDef = allNodes.find(n => n.id === childId)
+    const cs = ns.children[childId]
+    if (!childDef || !cs) return
     // Retry re-launch
     if (cs.status === 'pending' && cs.retryAt && new Date(cs.retryAt).getTime() <= Date.now()) {
       cs.retryAt = null
-      try { cs.sapRunId = await launchTask(run.connectionId, child, defaults); cs.status = 'running' }
-      catch (e) { cs.status = 'error'; cs.finishedAt = new Date().toISOString(); cs.error = e.message }
-      return
-    }
-    // Launch if this child hasn't started yet
-    if (cs.status === 'pending' && !cs.sapRunId) {
-      cs.status = 'running'; cs.startedAt = new Date().toISOString()
-      try { cs.sapRunId = await launchTask(run.connectionId, child, defaults) }
+      try { cs.sapRunId = await launchTask(run.connectionId, childDef, defaults); cs.status = 'running' }
       catch (e) { cs.status = 'error'; cs.finishedAt = new Date().toISOString(); cs.error = e.message }
       return
     }
@@ -280,43 +273,38 @@ async function pollGroupNode(run, nodeId, nodeDef, allNodes) {
     try { code = await pollSapStatus(run.connectionId, cs.sapRunId) }
     catch { return }
     applyTaskResult(cs, code,
-      child.data?.errorStrategy || 'stop',
-      child.data?.maxRetries    || 0,
-      child.data?.retryDelaySec || 30)
-    // If this child errored with stop strategy, mark remaining children as skipped
-    if (cs.status === 'error' && (child.data?.errorStrategy || 'stop') === 'stop') {
-      for (const remaining of children.slice(activeIdx + 1)) {
-        if (ns.children[remaining.id]) ns.children[remaining.id].status = 'skipped'
-      }
-      ns.status = 'error'; ns.finishedAt = new Date().toISOString()
-    }
-  } else {
-    await Promise.allSettled(children.map(async child => {
-      const cs = ns.children[child.id]
-      if (!cs) return
-      // Retry re-launch
-      if (cs.status === 'pending' && cs.retryAt && new Date(cs.retryAt).getTime() <= Date.now()) {
-        cs.retryAt = null
-        try { cs.sapRunId = await launchTask(run.connectionId, child, defaults); cs.status = 'running' }
-        catch (e) { cs.status = 'error'; cs.finishedAt = new Date().toISOString(); cs.error = e.message }
-        return
-      }
-      if (cs.status !== 'running' || !cs.sapRunId) return
-      let code
-      try { code = await pollSapStatus(run.connectionId, cs.sapRunId) }
-      catch { return }
-      applyTaskResult(cs, code,
-        child.data?.errorStrategy || 'stop',
-        child.data?.maxRetries    || 0,
-        child.data?.retryDelaySec || 30)
-    }))
+      childDef.data?.errorStrategy || 'stop',
+      childDef.data?.maxRetries    || 0,
+      childDef.data?.retryDelaySec || 30)
+  }))
 
-    const allDone = children.every(c => DONE_NODE.has(ns.children[c.id]?.status))
-    if (allDone) {
-      const anyErr = children.some(c => ns.children[c.id]?.status === 'error')
-      ns.status = anyErr ? 'error' : 'success'
-      ns.finishedAt = new Date().toISOString()
+  // Check if current wave is done
+  const waveDone = currentWaveIds.every(id => DONE_NODE.has(ns.children[id]?.status))
+  if (!waveDone) return
+
+  // Check for blocking errors in current wave
+  const hasBlockingError = currentWaveIds.some(id => {
+    if (ns.children[id]?.status !== 'error') return false
+    const childDef = allNodes.find(n => n.id === id)
+    return (childDef?.data?.errorStrategy || 'stop') === 'stop'
+  })
+
+  if (hasBlockingError) {
+    for (const waveIds of ns.groupWaves.slice(ns.currentGroupWave + 1)) {
+      for (const id of waveIds) if (ns.children[id]) ns.children[id].status = 'skipped'
     }
+    ns.status = 'error'; ns.finishedAt = new Date().toISOString()
+    return
+  }
+
+  // Advance to next wave or mark group done
+  if (ns.currentGroupWave < ns.groupWaves.length - 1) {
+    ns.currentGroupWave++
+    await launchGroupWave(run, ns, ns.groupWaves[ns.currentGroupWave], allNodes, defaults)
+  } else {
+    const anyErr = Object.values(ns.children).some(cs => cs.status === 'error')
+    ns.status = anyErr ? 'error' : 'success'
+    ns.finishedAt = new Date().toISOString()
   }
 }
 
@@ -335,7 +323,7 @@ async function startRun(orchestrationId, defaultAgent = null, defaultProfile = n
     const err = new Error('Ya hay una ejecución activa'); err.statusCode = 409; throw err
   }
 
-  const waves = buildWaves(nodes, edges)
+  const waves = buildWaves(nodes.filter(n => !n.parentId), edges)
   if (waves.length === 0) throw new Error('No se pudo determinar el orden de ejecución (¿ciclo detectado?)')
 
   let run = {
@@ -348,7 +336,7 @@ async function startRun(orchestrationId, defaultAgent = null, defaultProfile = n
     nodes: Object.fromEntries(nodes.map(n => [n.id, initNodeState(n, nodes)])),
   }
 
-  run = await executeWave(run, 0, nodes)
+  run = await executeWave(run, 0, nodes, edges)
   await redisSetObj(RUN_KEY, run)
   return run
 }
@@ -366,7 +354,7 @@ async function tick(orchestrationId) {
     await redisSetObj(RUN_KEY, run); return run
   }
 
-  const { nodes } = resolveGraph(orch)
+  const { nodes, edges } = resolveGraph(orch)
   const waveNodeIds = run.waves[run.currentWave] || []
 
   // Poll all nodes in current wave
@@ -374,7 +362,7 @@ async function tick(orchestrationId) {
     const nodeDef = nodes.find(n => n.id === nodeId)
     if (!nodeDef) return
     if (nodeDef.type === 'task')  await pollTaskNode(run, nodeId, nodeDef)
-    if (nodeDef.type === 'group') await pollGroupNode(run, nodeId, nodeDef, nodes)
+    if (nodeDef.type === 'group') await pollGroupNode(run, nodeId, nodeDef, nodes, edges)
   }))
 
   // Check if wave is complete
@@ -395,7 +383,7 @@ async function tick(orchestrationId) {
     }
   } else if (run.currentWave < run.waves.length - 1) {
     run.currentWave++
-    run = await executeWave(run, run.currentWave, nodes)
+    run = await executeWave(run, run.currentWave, nodes, edges)
   } else {
     const anyErr = Object.values(run.nodes).some(ns => ns.status === 'error')
     run.status = anyErr ? 'error' : 'success'

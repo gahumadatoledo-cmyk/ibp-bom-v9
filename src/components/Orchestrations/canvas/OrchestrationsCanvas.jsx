@@ -17,7 +17,7 @@ const EDGE_DEFAULTS = {
   animated: false,
 }
 
-function toRFNodes(nodes, run, onSelect, onRunSingle) {
+function toRFNodes(nodes, run, onSelect, onRunSingle, edges = []) {
   return nodes.map(n => {
     const rfType = n.type === 'task' ? 'orchTask' : n.type === 'group' ? 'orchGroup' : n.type
     const ns = run?.nodes?.[n.id]
@@ -30,10 +30,13 @@ function toRFNodes(nodes, run, onSelect, onRunSingle) {
         childSummary = `${done}/${vals.length} completadas`
       }
     }
+    const hasInternalEdges = rfType === 'orchGroup'
+      ? edges.some(e => nodes.some(c => c.id === e.source && c.parentId === n.id))
+      : false
     return {
       ...n,
       type: rfType,
-      data: { ...n.data, runStatus, sapRunId: ns?.sapRunId || null, childSummary, onSelect, onRunSingle: rfType === 'orchTask' ? onRunSingle : undefined },
+      data: { ...n.data, runStatus, sapRunId: ns?.sapRunId || null, childSummary, onSelect, onRunSingle: rfType === 'orchTask' ? onRunSingle : undefined, hasInternalEdges },
     }
   })
 }
@@ -63,7 +66,6 @@ function CanvasInner({
   const rfInstance = useReactFlow()
   const saveTimer  = useRef(null)
   const [cycleErr, setCycleErr]     = useState(false)
-  const [groupErr, setGroupErr]     = useState(false)
 
   // Exposes imperative helpers so the parent can sync canvas state without going
   // through the debounced save path (which could overwrite panel changes).
@@ -81,7 +83,7 @@ function CanvasInner({
 
   // Re-init when orchestration changes
   useEffect(() => {
-    setNodes(toRFNodes(initialNodes, run, handleNodeSelect, onRunSingle))
+    setNodes(toRFNodes(initialNodes, run, handleNodeSelect, onRunSingle, initialEdges))
     setEdges(toRFEdges(initialEdges, run, initialNodes))
     setCycleErr(false)
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -90,7 +92,7 @@ function CanvasInner({
   // Merge run state without reinitializing layout
   useEffect(() => {
     if (!run) return
-    setNodes(nds => toRFNodes(nds, run, handleNodeSelect, onRunSingle))
+    setNodes(nds => toRFNodes(nds, run, handleNodeSelect, onRunSingle, edges))
     setEdges(eds => toRFEdges(eds, run, nodes))
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [run])
@@ -111,7 +113,6 @@ function CanvasInner({
           agentName: data.agentName, profileName: data.profileName,
           errorStrategy: data.errorStrategy, maxRetries: data.maxRetries,
           retryDelaySec: data.retryDelaySec,
-          executionMode: data.executionMode || 'parallel',
           globalVariables: data.globalVariables || [],
           children: data.children || [],
         },
@@ -136,11 +137,6 @@ function CanvasInner({
   }
 
   const onConnect = useCallback((params) => {
-    const src = nodes.find(n => n.id === params.source)
-    const tgt = nodes.find(n => n.id === params.target)
-    if (src?.parentId && src.parentId === tgt?.parentId) {
-      setGroupErr(true); setTimeout(() => setGroupErr(false), 3000); return
-    }
     const newEdge = { ...params, id: crypto.randomUUID(), ...EDGE_DEFAULTS }
     const newEdges = addEdge(newEdge, edges)
     if (hasCycle(nodes, newEdges)) { setCycleErr(true); setTimeout(() => setCycleErr(false), 2500); return }
@@ -152,8 +148,8 @@ function CanvasInner({
     if (connection.source === connection.target) return false
     const src = nodes.find(n => n.id === connection.source)
     const tgt = nodes.find(n => n.id === connection.target)
-    if (src?.parentId && src.parentId === tgt?.parentId) return false
-    return true
+    // Only allow same-level connections: both top-level or both in the same group
+    return (src?.parentId || null) === (tgt?.parentId || null)
   }, [nodes])
 
   // ── Drop handler ──────────────────────────────────────────────────────────
@@ -206,8 +202,7 @@ function CanvasInner({
       position: { x: center.x - 150, y: center.y - 90 },
       style: { width: 300, height: 180 },
       data: {
-        label: 'Grupo paralelo', children: [],
-        executionMode: 'parallel',
+        label: 'Nuevo grupo', children: [],
         runStatus: 'pending', onSelect: handleNodeSelect,
       },
     }
@@ -221,7 +216,7 @@ function CanvasInner({
   // ── Auto layout ──────────────────────────────────────────────────────────
   function handleAutoLayout() {
     const laid = autoLayout(nodes, edges)
-    const updated = toRFNodes(laid, run, handleNodeSelect)
+    const updated = toRFNodes(laid, run, handleNodeSelect, onRunSingle, edges)
     setNodes(updated)
     debounced_save(updated, edges)
     setTimeout(() => rfInstance.fitView({ padding: 0.15 }), 50)
@@ -270,17 +265,6 @@ function CanvasInner({
             </div>
           </Panel>
         )}
-        {groupErr && (
-          <Panel position="top-center" style={{ margin: 8 }}>
-            <div style={{
-              background: 'rgba(251,191,36,.12)', border: '1px solid rgba(251,191,36,.4)',
-              borderRadius: 6, padding: '6px 12px', fontSize: 11, color: '#fbbf24',
-            }}>
-              ⚠ Las conexiones dentro de un grupo no afectan la ejecución — el orden lo controla el modo del grupo (serial / paralelo)
-            </div>
-          </Panel>
-        )}
-
         {nodes.length === 0 && (
           <Panel position="center">
             <div style={{ textAlign: 'center', color: 'var(--text2)', pointerEvents: 'none' }}>

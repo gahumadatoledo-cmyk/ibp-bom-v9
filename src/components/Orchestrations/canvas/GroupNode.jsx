@@ -6,9 +6,9 @@ export default function GroupNode({ data, selected, id }) {
   const color     = STATUS_COLORS[status]
   const icon      = STATUS_ICONS[status]
   const isActive  = status === 'running'
-  const isSerial  = data.executionMode === 'serial'
+  const isSerial  = !!data.hasInternalEdges
   const modeColor = isSerial ? '#F7A800' : '#29ABE2'
-  const modeLabel = isSerial ? '→ Serial' : '⊞ Paralelo'
+  const modeLabel = isSerial ? '→ En secuencia' : '⊞ En paralelo'
 
   return (
     <div
