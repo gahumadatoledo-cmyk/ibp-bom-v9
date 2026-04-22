@@ -31,41 +31,25 @@ function Field({ label, children }) {
   )
 }
 
-function AgentSelect({ value, agents, loading, onChange }) {
-  if (loading) {
+function DropdownOrText({ value, options, loading, emptyLabel, placeholder, onChange }) {
+  if (loading) return <div style={{ ...inputStyle, color: 'var(--text3)' }}>Cargando…</div>
+  if (options.length > 0) {
     return (
-      <div style={{ ...inputStyle, color: 'var(--text3)', display: 'flex', alignItems: 'center' }}>
-        Cargando…
-      </div>
+      <select style={{ ...inputStyle, cursor: 'pointer' }} value={value || ''} onChange={e => onChange(e.target.value || null)}>
+        <option value="">{emptyLabel}</option>
+        {options.map(o => (
+          <option key={o.key} value={o.value}>{o.label}</option>
+        ))}
+      </select>
     )
   }
   return (
-    <select style={{ ...inputStyle, cursor: 'pointer' }} value={value || ''} onChange={e => onChange(e.target.value || null)}>
-      <option value="">— Sin agente específico —</option>
-      {agents.map(a => (
-        <option key={a.guid || a.name} value={a.name}>
-          {a.name}{a.agentStatus && a.agentStatus !== 'CONNECTED' ? ` (${a.agentStatus})` : ''}
-        </option>
-      ))}
-    </select>
-  )
-}
-
-function ConfigSelect({ value, configs, loading, onChange }) {
-  if (loading) {
-    return (
-      <div style={{ ...inputStyle, color: 'var(--text3)', display: 'flex', alignItems: 'center' }}>
-        Cargando…
-      </div>
-    )
-  }
-  return (
-    <select style={{ ...inputStyle, cursor: 'pointer' }} value={value || ''} onChange={e => onChange(e.target.value || null)}>
-      <option value="">— Sin configuración específica —</option>
-      {configs.map(c => (
-        <option key={c.guid || c.name} value={c.name}>{c.name}</option>
-      ))}
-    </select>
+    <input
+      style={inputStyle}
+      value={value || ''}
+      onChange={e => onChange(e.target.value || null)}
+      placeholder={placeholder}
+    />
   )
 }
 
@@ -162,19 +146,27 @@ export default function NodeConfigPanel({ node, connection, onUpdate, onClose })
         {!isGroup && (
           <>
             <Field label="Agente">
-              <AgentSelect
+              <DropdownOrText
                 value={d.agentName}
-                agents={agents}
+                options={agents.map(a => ({
+                  key: a.guid || a.name,
+                  value: a.name,
+                  label: a.name + (a.agentStatus && a.agentStatus !== 'CONNECTED' ? ` (${a.agentStatus})` : ''),
+                }))}
                 loading={loadingOptions}
+                emptyLabel="— Sin agente específico —"
+                placeholder="Nombre del agente"
                 onChange={v => set({ agentName: v })}
               />
             </Field>
 
             <Field label="Configuración de sistema">
-              <ConfigSelect
+              <DropdownOrText
                 value={d.profileName}
-                configs={configs}
+                options={configs.map(c => ({ key: c.guid || c.name, value: c.name, label: c.name }))}
                 loading={loadingOptions}
+                emptyLabel="— Sin configuración específica —"
+                placeholder="Nombre de la configuración"
                 onChange={v => set({ profileName: v })}
               />
             </Field>
