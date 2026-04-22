@@ -171,6 +171,7 @@ export default function Orchestrations({ connection }) {
               {selectedNode && (
                 <NodeConfigPanel
                   node={selectedNode}
+                  connection={connection}
                   onUpdate={handleNodeUpdate}
                   onClose={() => setSelectedNodeId(null)}
                 />

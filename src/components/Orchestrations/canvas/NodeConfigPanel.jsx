@@ -1,4 +1,15 @@
-const VALID_STRATEGIES = ['stop', 'continue', 'retry']
+import { useState, useEffect } from 'react'
+
+async function soapCall(connectionId, operation, params = {}) {
+  const res = await fetch('/api/soap', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ connectionId, operation, params }),
+  })
+  const data = await res.json()
+  if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
+  return data
+}
 
 const inputStyle = {
   background: 'var(--bg3)', border: '1px solid var(--border)', borderRadius: 6,
@@ -20,10 +31,69 @@ function Field({ label, children }) {
   )
 }
 
-export default function NodeConfigPanel({ node, onUpdate, onClose }) {
+function AgentSelect({ value, agents, loading, onChange }) {
+  if (loading) {
+    return (
+      <div style={{ ...inputStyle, color: 'var(--text3)', display: 'flex', alignItems: 'center' }}>
+        Cargando…
+      </div>
+    )
+  }
+  return (
+    <select style={{ ...inputStyle, cursor: 'pointer' }} value={value || ''} onChange={e => onChange(e.target.value || null)}>
+      <option value="">— Sin agente específico —</option>
+      {agents.map(a => (
+        <option key={a.guid || a.name} value={a.name}>
+          {a.name}{a.agentStatus && a.agentStatus !== 'CONNECTED' ? ` (${a.agentStatus})` : ''}
+        </option>
+      ))}
+    </select>
+  )
+}
+
+function ConfigSelect({ value, configs, loading, onChange }) {
+  if (loading) {
+    return (
+      <div style={{ ...inputStyle, color: 'var(--text3)', display: 'flex', alignItems: 'center' }}>
+        Cargando…
+      </div>
+    )
+  }
+  return (
+    <select style={{ ...inputStyle, cursor: 'pointer' }} value={value || ''} onChange={e => onChange(e.target.value || null)}>
+      <option value="">— Sin configuración específica —</option>
+      {configs.map(c => (
+        <option key={c.guid || c.name} value={c.name}>{c.name}</option>
+      ))}
+    </select>
+  )
+}
+
+export default function NodeConfigPanel({ node, connection, onUpdate, onClose }) {
   if (!node) return null
   const d = node.data
   const isGroup = node.type === 'orchGroup' || node.type === 'group'
+
+  const [agents,  setAgents]  = useState([])
+  const [configs, setConfigs] = useState([])
+  const [loadingOptions, setLoadingOptions] = useState(false)
+
+  useEffect(() => {
+    if (isGroup || !connection) return
+    setLoadingOptions(true)
+    Promise.all([
+      soapCall(connection.id, 'getAgents', { activeOnly: false }),
+      soapCall(connection.id, 'getSystemConfigurations'),
+    ])
+      .then(([agentGroups, profs]) => {
+        const flat = (Array.isArray(agentGroups) ? agentGroups : [])
+          .flatMap(g => Array.isArray(g.agents) ? g.agents : [])
+        setAgents(flat)
+        setConfigs(Array.isArray(profs) ? profs : [])
+      })
+      .catch(() => { /* silencioso — el usuario puede escribir manualmente */ })
+      .finally(() => setLoadingOptions(false))
+  }, [node.id, connection?.id, isGroup])
 
   function set(patch) { onUpdate(node.id, patch) }
 
@@ -49,7 +119,7 @@ export default function NodeConfigPanel({ node, onUpdate, onClose }) {
       </div>
 
       <div style={{ flex: 1, overflowY: 'auto', padding: 14 }}>
-        {/* Label (both types) */}
+        {/* Label — ambos tipos */}
         <Field label="Nombre visible">
           <input
             style={inputStyle}
@@ -59,18 +129,20 @@ export default function NodeConfigPanel({ node, onUpdate, onClose }) {
           />
         </Field>
 
+        {/* Grupo: modo de ejecución */}
         {isGroup && (
           <Field label="Modo de ejecución interna">
             <div style={{ display: 'flex', gap: 8 }}>
               {['parallel', 'serial'].map(mode => {
                 const active = (d.executionMode || 'parallel') === mode
-                const label = mode === 'parallel' ? '⊞ Paralelo' : '→ Serial'
+                const label  = mode === 'parallel' ? '⊞ Paralelo' : '→ Serial'
+                const color  = mode === 'parallel' ? '#29ABE2' : '#F7A800'
                 return (
                   <button key={mode} onClick={() => set({ executionMode: mode })} style={{
                     flex: 1, padding: '6px', borderRadius: 6, fontSize: 11, fontWeight: 600,
-                    border: `1px solid ${active ? (mode === 'parallel' ? '#29ABE244' : '#F7A80044') : 'var(--border)'}`,
-                    background: active ? (mode === 'parallel' ? '#29ABE222' : '#F7A80022') : 'var(--bg3)',
-                    color: active ? (mode === 'parallel' ? '#29ABE2' : '#F7A800') : 'var(--text2)',
+                    border: `1px solid ${active ? color + '44' : 'var(--border)'}`,
+                    background: active ? color + '22' : 'var(--bg3)',
+                    color: active ? color : 'var(--text2)',
                     cursor: 'pointer',
                   }}>
                     {label}
@@ -86,18 +158,25 @@ export default function NodeConfigPanel({ node, onUpdate, onClose }) {
           </Field>
         )}
 
+        {/* Task: agente, perfil, estrategia */}
         {!isGroup && (
           <>
-            <Field label="Agente (opcional)">
-              <input style={inputStyle} value={d.agentName || ''}
-                onChange={e => set({ agentName: e.target.value || null })}
-                placeholder="Nombre del agente" />
+            <Field label="Agente">
+              <AgentSelect
+                value={d.agentName}
+                agents={agents}
+                loading={loadingOptions}
+                onChange={v => set({ agentName: v })}
+              />
             </Field>
 
-            <Field label="Perfil (opcional)">
-              <input style={inputStyle} value={d.profileName || ''}
-                onChange={e => set({ profileName: e.target.value || null })}
-                placeholder="Nombre del perfil" />
+            <Field label="Configuración de sistema">
+              <ConfigSelect
+                value={d.profileName}
+                configs={configs}
+                loading={loadingOptions}
+                onChange={v => set({ profileName: v })}
+              />
             </Field>
 
             <Field label="En caso de error">
@@ -129,7 +208,7 @@ export default function NodeConfigPanel({ node, onUpdate, onClose }) {
           </>
         )}
 
-        {/* Delete button */}
+        {/* Eliminar */}
         <div style={{ marginTop: 8, paddingTop: 12, borderTop: '1px solid var(--border)' }}>
           <button
             onClick={() => { onUpdate(node.id, null); onClose() }}

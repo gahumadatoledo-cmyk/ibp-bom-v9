@@ -34,13 +34,12 @@ export default function RunModal({ connection, onConfirm, onClose }) {
     async function load() {
       try {
         const [agentGroups, profs] = await Promise.all([
-          soapCall(connection.id, 'getAgents', { activeOnly: true }),
+          soapCall(connection.id, 'getAgents', { activeOnly: false }),
           soapCall(connection.id, 'getSystemConfigurations'),
         ])
         // getAgents returns [{name, agents:[{name, agentStatus, guid}]}]
         const flatAgents = (Array.isArray(agentGroups) ? agentGroups : [])
           .flatMap(g => Array.isArray(g.agents) ? g.agents : [])
-          .filter(a => a.agentStatus === 'CONNECTED')
         setAgents(flatAgents)
         // getSystemConfigurations returns [{name, guid, dsConfigurations}]
         setConfigs(Array.isArray(profs) ? profs : [])
@@ -101,7 +100,7 @@ export default function RunModal({ connection, onConfirm, onClose }) {
                 <label style={labelStyle}>
                   Agente
                   <span style={{ fontWeight: 400, color: 'var(--text3)', marginLeft: 4 }}>
-                    ({agents.length} conectado{agents.length !== 1 ? 's' : ''})
+                    ({agents.length} disponible{agents.length !== 1 ? 's' : ''})
                   </span>
                 </label>
                 <select
@@ -111,7 +110,9 @@ export default function RunModal({ connection, onConfirm, onClose }) {
                 >
                   <option value="">— Sin agente específico —</option>
                   {agents.map(a => (
-                    <option key={a.guid || a.name} value={a.name}>{a.name}</option>
+                    <option key={a.guid || a.name} value={a.name}>
+                      {a.name}{a.agentStatus && a.agentStatus !== 'CONNECTED' ? ` (${a.agentStatus})` : ''}
+                    </option>
                   ))}
                 </select>
               </div>
