@@ -26,7 +26,7 @@ export default function RunModal({ connection, onConfirm, onClose }) {
           fetch('/api/soap', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ connectionId: connection.id, operation: 'getAgents', params: { activeOnly: false } }),
+            body: JSON.stringify({ connectionId: connection.id, operation: 'getAgents', params: { activeOnly: true } }),
           }),
           fetch('/api/soap', {
             method: 'POST',
@@ -36,9 +36,13 @@ export default function RunModal({ connection, onConfirm, onClose }) {
         ])
         const agData = await agRes.json()
         const cfData = await cfRes.json()
-        const connected = (agData.agents || []).filter(a => a.status === 'CONNECTED')
-        setAgents(connected)
-        setConfigs(cfData.configurations || cfData.systemConfigurations || [])
+        // API returns groups of agents: [{ name, agents: [{ name, agentStatus }] }]
+        const allAgents = Array.isArray(agData)
+          ? agData.flatMap(g => g.agents || []).filter(a => a.agentStatus === 'CONNECTED')
+          : []
+        setAgents(allAgents)
+        // API returns array of configs: [{ name, guid, dsConfigurations }]
+        setConfigs(Array.isArray(cfData) ? cfData : [])
       } catch (e) {
         setError(e.message)
       } finally {
@@ -94,7 +98,7 @@ export default function RunModal({ connection, onConfirm, onClose }) {
                 <select style={selectStyle} value={selectedAgent} onChange={e => setSelectedAgent(e.target.value)}>
                   <option value="">— Sin agente específico —</option>
                   {agents.map(a => (
-                    <option key={a.name} value={a.name}>{a.name}</option>
+                    <option key={a.guid || a.name} value={a.name}>{a.name}</option>
                   ))}
                 </select>
                 {agents.length === 0 && (

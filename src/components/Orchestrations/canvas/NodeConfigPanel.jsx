@@ -23,6 +23,7 @@ function Field({ label, children }) {
 export default function NodeConfigPanel({ node, onUpdate, onClose }) {
   if (!node) return null
   const d = node.data
+  const isGroup = node.type === 'orchGroup' || node.type === 'group'
 
   function set(patch) { onUpdate(node.id, patch) }
 
@@ -38,7 +39,7 @@ export default function NodeConfigPanel({ node, onUpdate, onClose }) {
       }}>
         <div>
           <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text)' }}>
-            {node.type === 'orchGroup' ? '⊞ Grupo' : '⬡ Task'}
+            {isGroup ? '⊞ Grupo' : '⬡ Task'}
           </div>
           <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 1, fontFamily: 'var(--mono)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 180 }}>
             {d.taskName || d.label}
@@ -58,7 +59,7 @@ export default function NodeConfigPanel({ node, onUpdate, onClose }) {
           />
         </Field>
 
-        {node.type === 'orchGroup' && (
+        {isGroup && (
           <Field label="Modo de ejecución interna">
             <div style={{ display: 'flex', gap: 8 }}>
               {['parallel', 'serial'].map(mode => {
@@ -85,7 +86,7 @@ export default function NodeConfigPanel({ node, onUpdate, onClose }) {
           </Field>
         )}
 
-        {node.type !== 'orchGroup' && (
+        {!isGroup && (
           <>
             <Field label="Agente (opcional)">
               <input style={inputStyle} value={d.agentName || ''}
