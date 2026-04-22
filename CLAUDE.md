@@ -19,6 +19,7 @@
 - No agregar comentarios al código salvo que el WHY sea no obvio.
 - No crear archivos de documentación (README, md) salvo que se pida explícitamente.
 - Llamar herramientas en paralelo cuando no hay dependencia entre ellas.
+- Al momento de pensar e imprimir por terminal la respuesta, no la duplicar la explicacion solo mostrar el plan final.
 
 ## Regla fundamental
 **No inventar información nunca.** Si se necesita un dato específico (endpoints, parámetros SOAP, estructura de respuesta, etc.) y no está disponible en el código o en lo que el usuario ha proporcionado, preguntar antes de escribir cualquier cosa.

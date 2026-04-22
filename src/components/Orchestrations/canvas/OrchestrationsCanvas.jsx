@@ -62,7 +62,8 @@ function CanvasInner({
   const [edges, setEdges, onEdgesChange] = useEdgesState([])
   const rfInstance = useReactFlow()
   const saveTimer  = useRef(null)
-  const [cycleErr, setCycleErr] = useState(false)
+  const [cycleErr, setCycleErr]     = useState(false)
+  const [groupErr, setGroupErr]     = useState(false)
 
   // Exposes imperative helpers so the parent can sync canvas state without going
   // through the debounced save path (which could overwrite panel changes).
@@ -135,6 +136,11 @@ function CanvasInner({
   }
 
   const onConnect = useCallback((params) => {
+    const src = nodes.find(n => n.id === params.source)
+    const tgt = nodes.find(n => n.id === params.target)
+    if (src?.parentId && src.parentId === tgt?.parentId) {
+      setGroupErr(true); setTimeout(() => setGroupErr(false), 3000); return
+    }
     const newEdge = { ...params, id: crypto.randomUUID(), ...EDGE_DEFAULTS }
     const newEdges = addEdge(newEdge, edges)
     if (hasCycle(nodes, newEdges)) { setCycleErr(true); setTimeout(() => setCycleErr(false), 2500); return }
@@ -143,8 +149,12 @@ function CanvasInner({
   }, [edges, nodes])
 
   const isValidConnection = useCallback((connection) => {
-    return connection.source !== connection.target
-  }, [])
+    if (connection.source === connection.target) return false
+    const src = nodes.find(n => n.id === connection.source)
+    const tgt = nodes.find(n => n.id === connection.target)
+    if (src?.parentId && src.parentId === tgt?.parentId) return false
+    return true
+  }, [nodes])
 
   // ── Drop handler ──────────────────────────────────────────────────────────
   const onDragOver = useCallback((e) => {
@@ -257,6 +267,16 @@ function CanvasInner({
               borderRadius: 6, padding: '6px 12px', fontSize: 11, color: 'var(--red)',
             }}>
               ⚠ Ciclo detectado — esa conexión crearía un bucle
+            </div>
+          </Panel>
+        )}
+        {groupErr && (
+          <Panel position="top-center" style={{ margin: 8 }}>
+            <div style={{
+              background: 'rgba(251,191,36,.12)', border: '1px solid rgba(251,191,36,.4)',
+              borderRadius: 6, padding: '6px 12px', fontSize: 11, color: '#fbbf24',
+            }}>
+              ⚠ Las conexiones dentro de un grupo no afectan la ejecución — el orden lo controla el modo del grupo (serial / paralelo)
             </div>
           </Panel>
         )}
