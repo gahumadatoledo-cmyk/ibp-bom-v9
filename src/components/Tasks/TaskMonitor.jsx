@@ -68,7 +68,30 @@ export default function TaskMonitor({ connection }) {
   const [fromDate, setFromDate] = useState(() => isoNow(-7))
   const [toDate,   setToDate]   = useState(() => isoNow(0))
 
+  const MAX_DAYS = 90
+  const rangeDays = fromDate && toDate
+    ? Math.round((new Date(toDate) - new Date(fromDate)) / 86400000)
+    : null
+  const rangeExceeded = rangeDays !== null && rangeDays > MAX_DAYS
+
+  function handleFromChange(val) {
+    setFromDate(val)
+    if (val && toDate) {
+      const diff = Math.round((new Date(toDate) - new Date(val)) / 86400000)
+      if (diff > MAX_DAYS) setToDate(new Date(new Date(val).getTime() + MAX_DAYS * 86400000).toISOString().slice(0, 16))
+    }
+  }
+
+  function handleToChange(val) {
+    setToDate(val)
+    if (val && fromDate) {
+      const diff = Math.round((new Date(val) - new Date(fromDate)) / 86400000)
+      if (diff > MAX_DAYS) setFromDate(new Date(new Date(val).getTime() - MAX_DAYS * 86400000).toISOString().slice(0, 16))
+    }
+  }
+
   const loadTasks = useCallback(async () => {
+    if (rangeExceeded) { setError(`El rango no puede superar ${MAX_DAYS} días (SAP CI-DS limit)`); return }
     setLoading(true); setError('')
     const start = performance.now()
     try {
@@ -174,9 +197,14 @@ export default function TaskMonitor({ connection }) {
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-          <input type="datetime-local" value={fromDate} onChange={e => setFromDate(e.target.value)} style={inputStyle} />
+          <input type="datetime-local" value={fromDate} onChange={e => handleFromChange(e.target.value)} style={{ ...inputStyle, borderColor: rangeExceeded ? 'var(--red)' : undefined }} />
           <span style={{ color: 'var(--text2)', fontSize: 11 }}>→</span>
-          <input type="datetime-local" value={toDate}   onChange={e => setToDate(e.target.value)}   style={inputStyle} />
+          <input type="datetime-local" value={toDate}   onChange={e => handleToChange(e.target.value)}   style={{ ...inputStyle, borderColor: rangeExceeded ? 'var(--red)' : undefined }} />
+          {rangeDays !== null && (
+            <span style={{ fontSize: 10, color: rangeExceeded ? 'var(--red)' : 'var(--text3)', fontWeight: rangeExceeded ? 700 : 400, whiteSpace: 'nowrap' }}>
+              {rangeExceeded ? `⚠ máx ${MAX_DAYS}d` : `${rangeDays}d`}
+            </span>
+          )}
           <input type="text" placeholder="Buscar…" value={search} onChange={e => setSearch(e.target.value)} style={{ ...inputStyle, width: 180 }} />
           <button onClick={loadTasks} disabled={loading} style={{ background: 'var(--bg2)', border: '1px solid var(--border2)', borderRadius: 6, color: 'var(--text2)', fontSize: 11, fontWeight: 600, padding: '6px 12px', cursor: 'pointer' }}>↺ Refresh</button>
           <span style={{ fontSize: 10, color: 'var(--text3)', padding: '4px 8px', background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 6 }}>🔄 Auto {REFRESH_MS / 1000}s</span>

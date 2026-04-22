@@ -1,7 +1,7 @@
 {
   "name": "ibp-bom-v9",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.4.7",
   "type": "module",
   "engines": {
     "node": ">=20.19.0"
@@ -10,10 +10,14 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "release:patch": "npm version patch && git push && git push --tags",
+    "release:minor": "npm version minor && git push && git push --tags",
+    "release:major": "npm version major && git push && git push --tags"
   },
   "dependencies": {
     "@upstash/redis": "^1.37.0",
+    "@xyflow/react": "^12.4.4",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "recharts": "^3.8.0"
