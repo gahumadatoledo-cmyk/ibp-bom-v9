@@ -74,8 +74,8 @@ const CanvasInner = forwardRef(function CanvasInner({
     },
     deleteNode: (nodeId) => {
       clearTimeout(saveTimer.current)
-      setNodes(nds => nds.filter(n => n.id !== nodeId && n.parentId !== nodeId))
-      setEdges(eds => eds.filter(e => e.source !== nodeId && e.target !== nodeId))
+      // deleteElements is React Flow's proper deletion API — handles children and edges automatically
+      rfInstance.deleteElements({ nodes: [{ id: nodeId }] })
     },
   }))
 

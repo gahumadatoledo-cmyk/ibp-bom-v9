@@ -250,17 +250,18 @@ export default function NodeConfigPanel({ node, connection, onUpdate, onClose })
         <div style={{ marginTop: 4 }}>
           <button
             onClick={handleSave}
-            disabled={!dirty || saving}
+            disabled={saving}
             style={{
               width: '100%', padding: '8px', borderRadius: 6,
-              border: `1px solid ${dirty ? 'rgba(52,211,153,.4)' : 'var(--border)'}`,
-              background: dirty ? 'rgba(52,211,153,.15)' : 'var(--bg3)',
-              color: dirty ? '#34d399' : 'var(--text3)',
-              fontSize: 12, fontWeight: 700, cursor: dirty ? 'pointer' : 'default',
+              border: `1px solid ${dirty ? 'rgba(52,211,153,.5)' : 'rgba(52,211,153,.2)'}`,
+              background: dirty ? 'rgba(52,211,153,.18)' : 'rgba(52,211,153,.06)',
+              color: dirty ? '#34d399' : 'rgba(52,211,153,.5)',
+              fontSize: 12, fontWeight: 700,
+              cursor: saving ? 'default' : 'pointer',
               transition: 'all .15s',
             }}
           >
-            {saving ? 'Guardando…' : dirty ? 'Guardar cambios' : 'Sin cambios'}
+            {saving ? 'Guardando…' : dirty ? '✓ Guardar cambios' : '✓ Guardar'}
           </button>
         </div>
 
