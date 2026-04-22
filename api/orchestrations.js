@@ -84,10 +84,12 @@ function validateNodeData(data = {}) {
 
 function validateNode(n) {
   if (!n.id) throw new Error('Cada nodo requiere id')
-  if (!['task', 'group'].includes(n.type)) throw new Error(`Tipo de nodo inválido: ${n.type}`)
+  // Normalize React Flow internal types to storage types
+  const type = n.type === 'orchTask' ? 'task' : n.type === 'orchGroup' ? 'group' : n.type
+  if (!['task', 'group'].includes(type)) throw new Error(`Tipo de nodo inválido: ${n.type}`)
   return {
     id:       n.id,
-    type:     n.type,
+    type,
     position: { x: Number(n.position?.x ?? 0), y: Number(n.position?.y ?? 0) },
     style:    n.style || undefined,
     parentId: n.parentId || undefined,

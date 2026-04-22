@@ -1,7 +1,8 @@
 import { Handle, Position } from '@xyflow/react'
 import { STATUS_COLORS, STATUS_ICONS } from '../canvasUtils'
 
-const STRATEGY_COLOR = { stop: '#ff6b6b', continue: '#fbbf24', retry: '#3b82f6' }
+const STRATEGY_COLOR = { stop: '#64748b', continue: '#fbbf24', retry: '#3b82f6' }
+const STRATEGY_LABEL = { stop: 'err: stop', continue: 'err: continuar', retry: 'err: reintentar' }
 
 export default function TaskNode({ data, selected, id }) {
   const status  = data.runStatus || 'pending'
@@ -61,7 +62,7 @@ export default function TaskNode({ data, selected, id }) {
             color: STRATEGY_COLOR[data.errorStrategy] || '#64748b',
             border: `1px solid ${(STRATEGY_COLOR[data.errorStrategy] || '#64748b')}44`,
           }}>
-            {data.errorStrategy || 'stop'}
+            {STRATEGY_LABEL[data.errorStrategy] || STRATEGY_LABEL.stop}
             {data.errorStrategy === 'retry' && data.maxRetries ? ` ×${data.maxRetries}` : ''}
           </span>
           {data.sapRunId && (

@@ -19,11 +19,13 @@ const EDGE_DEFAULTS = {
 
 function toRFNodes(nodes, run, onSelect) {
   return nodes.map(n => {
+    // Map storage types → React Flow node types
+    const rfType = n.type === 'task' ? 'orchTask' : n.type === 'group' ? 'orchGroup' : n.type
     const ns = run?.nodes?.[n.id]
     const runStatus = ns?.status || 'pending'
     // For group: summarize children
     let childSummary = null
-    if (n.type === 'orchGroup' && ns?.children) {
+    if ((rfType === 'orchGroup') && ns?.children) {
       const vals = Object.values(ns.children)
       if (vals.length) {
         const done = vals.filter(c => !['pending', 'running'].includes(c.status)).length
@@ -32,6 +34,7 @@ function toRFNodes(nodes, run, onSelect) {
     }
     return {
       ...n,
+      type: rfType,
       data: { ...n.data, runStatus, sapRunId: ns?.sapRunId || null, childSummary, onSelect },
     }
   })
@@ -85,7 +88,9 @@ function CanvasInner({
     saveTimer.current = setTimeout(() => {
       // Strip RF-internal fields, keep only what backend needs
       const cleanNodes = nds.map(({ id, type, position, parentId, extent, style, data }) => ({
-        id, type, position,
+        id,
+        type: type === 'orchTask' ? 'task' : type === 'orchGroup' ? 'group' : type,
+        position,
         ...(parentId ? { parentId, extent } : {}),
         ...(style ? { style } : {}),
         data: {
