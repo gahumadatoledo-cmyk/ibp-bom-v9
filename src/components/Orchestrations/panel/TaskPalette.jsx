@@ -105,7 +105,7 @@ export default function TaskPalette({ connection, onAddGroup, collapsed = false,
         <span style={{ fontSize: 10, color: 'var(--text3)', writingMode: 'vertical-rl', letterSpacing: '0.1em', transform: 'rotate(180deg)' }}>
           TASKS
         </span>
-        <span style={{ fontSize: 14, color: 'var(--text3)' }}>›</span>
+        <span style={{ fontSize: 24, color: 'var(--text3)' }}>›</span>
       </div>
     )
   }
