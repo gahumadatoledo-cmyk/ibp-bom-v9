@@ -53,14 +53,35 @@ function DropdownOrText({ value, options, loading, emptyLabel, placeholder, onCh
   )
 }
 
+function initForm(data) {
+  return {
+    label:         data.label         || '',
+    executionMode: data.executionMode || 'parallel',
+    agentName:     data.agentName     || '',
+    profileName:   data.profileName   || '',
+    errorStrategy: data.errorStrategy || 'stop',
+    maxRetries:    data.maxRetries    ?? 1,
+    retryDelaySec: data.retryDelaySec ?? 30,
+  }
+}
+
 export default function NodeConfigPanel({ node, connection, onUpdate, onClose }) {
   if (!node) return null
-  const d = node.data
   const isGroup = node.type === 'orchGroup' || node.type === 'group'
+
+  const [form, setForm]   = useState(() => initForm(node.data))
+  const [dirty, setDirty] = useState(false)
+  const [saving, setSaving] = useState(false)
 
   const [agents,  setAgents]  = useState([])
   const [configs, setConfigs] = useState([])
   const [loadingOptions, setLoadingOptions] = useState(false)
+
+  // Re-initialize form when switching to a different node
+  useEffect(() => {
+    setForm(initForm(node.data))
+    setDirty(false)
+  }, [node.id])
 
   useEffect(() => {
     if (isGroup || !connection) return
@@ -75,11 +96,36 @@ export default function NodeConfigPanel({ node, connection, onUpdate, onClose })
         setAgents(flat)
         setConfigs(Array.isArray(profs) ? profs : [])
       })
-      .catch(() => { /* silencioso — el usuario puede escribir manualmente */ })
+      .catch(() => {})
       .finally(() => setLoadingOptions(false))
   }, [node.id, connection?.id, isGroup])
 
-  function set(patch) { onUpdate(node.id, patch) }
+  function patch(field, value) {
+    setForm(f => ({ ...f, [field]: value }))
+    setDirty(true)
+  }
+
+  function handleSave() {
+    setSaving(true)
+    const update = {
+      label:         form.label || node.data.taskName || 'Sin nombre',
+      executionMode: form.executionMode,
+      agentName:     form.agentName  || null,
+      profileName:   form.profileName || null,
+      errorStrategy: form.errorStrategy,
+      maxRetries:    Number(form.maxRetries),
+      retryDelaySec: Number(form.retryDelaySec),
+    }
+    onUpdate(node.id, update)
+    setDirty(false)
+    setSaving(false)
+  }
+
+  function handleDelete() {
+    if (!confirm('¿Eliminar este nodo?')) return
+    onUpdate(node.id, null)
+    onClose()
+  }
 
   return (
     <div style={{
@@ -96,20 +142,20 @@ export default function NodeConfigPanel({ node, connection, onUpdate, onClose })
             {isGroup ? '⊞ Grupo' : '⬡ Task'}
           </div>
           <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 1, fontFamily: 'var(--mono)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 180 }}>
-            {d.taskName || d.label}
+            {node.data.taskName || node.data.label}
           </div>
         </div>
         <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text2)', fontSize: 18, cursor: 'pointer', lineHeight: 1 }}>×</button>
       </div>
 
       <div style={{ flex: 1, overflowY: 'auto', padding: 14 }}>
-        {/* Label — ambos tipos */}
+        {/* Label */}
         <Field label="Nombre visible">
           <input
             style={inputStyle}
-            value={d.label || ''}
-            onChange={e => set({ label: e.target.value })}
-            placeholder={d.taskName || 'Nombre del nodo'}
+            value={form.label}
+            onChange={e => patch('label', e.target.value)}
+            placeholder={node.data.taskName || 'Nombre del nodo'}
           />
         </Field>
 
@@ -118,11 +164,11 @@ export default function NodeConfigPanel({ node, connection, onUpdate, onClose })
           <Field label="Modo de ejecución interna">
             <div style={{ display: 'flex', gap: 8 }}>
               {['parallel', 'serial'].map(mode => {
-                const active = (d.executionMode || 'parallel') === mode
+                const active = form.executionMode === mode
                 const label  = mode === 'parallel' ? '⊞ Paralelo' : '→ Serial'
                 const color  = mode === 'parallel' ? '#29ABE2' : '#F7A800'
                 return (
-                  <button key={mode} onClick={() => set({ executionMode: mode })} style={{
+                  <button key={mode} onClick={() => patch('executionMode', mode)} style={{
                     flex: 1, padding: '6px', borderRadius: 6, fontSize: 11, fontWeight: 600,
                     border: `1px solid ${active ? color + '44' : 'var(--border)'}`,
                     background: active ? color + '22' : 'var(--bg3)',
@@ -135,7 +181,7 @@ export default function NodeConfigPanel({ node, connection, onUpdate, onClose })
               })}
             </div>
             <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 5, lineHeight: 1.4 }}>
-              {(d.executionMode || 'parallel') === 'parallel'
+              {form.executionMode === 'parallel'
                 ? 'Todas las tasks del grupo se lanzan simultáneamente.'
                 : 'Las tasks del grupo se ejecutan de una en una, en orden.'}
             </div>
@@ -147,7 +193,7 @@ export default function NodeConfigPanel({ node, connection, onUpdate, onClose })
           <>
             <Field label="Agente">
               <DropdownOrText
-                value={d.agentName}
+                value={form.agentName}
                 options={agents.map(a => ({
                   key: a.guid || a.name,
                   value: a.name,
@@ -156,54 +202,72 @@ export default function NodeConfigPanel({ node, connection, onUpdate, onClose })
                 loading={loadingOptions}
                 emptyLabel="— Sin agente específico —"
                 placeholder="Nombre del agente"
-                onChange={v => set({ agentName: v })}
+                onChange={v => patch('agentName', v || '')}
               />
             </Field>
 
             <Field label="Configuración de sistema">
               <DropdownOrText
-                value={d.profileName}
+                value={form.profileName}
                 options={configs.map(c => ({ key: c.guid || c.name, value: c.name, label: c.name }))}
                 loading={loadingOptions}
                 emptyLabel="— Sin configuración específica —"
                 placeholder="Nombre de la configuración"
-                onChange={v => set({ profileName: v })}
+                onChange={v => patch('profileName', v || '')}
               />
             </Field>
 
             <Field label="En caso de error">
               <select style={{ ...inputStyle, cursor: 'pointer' }}
-                value={d.errorStrategy || 'stop'}
-                onChange={e => set({ errorStrategy: e.target.value })}>
+                value={form.errorStrategy}
+                onChange={e => patch('errorStrategy', e.target.value)}>
                 <option value="stop">Detener orquestación</option>
                 <option value="continue">Continuar al siguiente</option>
                 <option value="retry">Reintentar</option>
               </select>
             </Field>
 
-            {d.errorStrategy === 'retry' && (
+            {form.errorStrategy === 'retry' && (
               <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
                 <div style={{ flex: 1 }}>
                   <label style={labelStyle}>Máx reintentos</label>
                   <input type="number" min={1} max={5} style={inputStyle}
-                    value={d.maxRetries || 1}
-                    onChange={e => set({ maxRetries: Number(e.target.value) })} />
+                    value={form.maxRetries}
+                    onChange={e => patch('maxRetries', Number(e.target.value))} />
                 </div>
                 <div style={{ flex: 1 }}>
                   <label style={labelStyle}>Espera (seg)</label>
                   <input type="number" min={5} max={3600} style={inputStyle}
-                    value={d.retryDelaySec || 30}
-                    onChange={e => set({ retryDelaySec: Number(e.target.value) })} />
+                    value={form.retryDelaySec}
+                    onChange={e => patch('retryDelaySec', Number(e.target.value))} />
                 </div>
               </div>
             )}
           </>
         )}
 
-        {/* Eliminar */}
-        <div style={{ marginTop: 8, paddingTop: 12, borderTop: '1px solid var(--border)' }}>
+        {/* Guardar */}
+        <div style={{ marginTop: 4 }}>
           <button
-            onClick={() => { onUpdate(node.id, null); onClose() }}
+            onClick={handleSave}
+            disabled={!dirty || saving}
+            style={{
+              width: '100%', padding: '8px', borderRadius: 6,
+              border: `1px solid ${dirty ? 'rgba(52,211,153,.4)' : 'var(--border)'}`,
+              background: dirty ? 'rgba(52,211,153,.15)' : 'var(--bg3)',
+              color: dirty ? '#34d399' : 'var(--text3)',
+              fontSize: 12, fontWeight: 700, cursor: dirty ? 'pointer' : 'default',
+              transition: 'all .15s',
+            }}
+          >
+            {saving ? 'Guardando…' : dirty ? 'Guardar cambios' : 'Sin cambios'}
+          </button>
+        </div>
+
+        {/* Eliminar */}
+        <div style={{ marginTop: 10, paddingTop: 12, borderTop: '1px solid var(--border)' }}>
+          <button
+            onClick={handleDelete}
             style={{
               width: '100%', padding: '7px', borderRadius: 6,
               border: '1px solid rgba(255,107,107,.3)', background: 'rgba(255,107,107,.08)',

@@ -65,12 +65,17 @@ const CanvasInner = forwardRef(function CanvasInner({
   const saveTimer  = useRef(null)
   const [cycleErr, setCycleErr] = useState(false)
 
-  // Exposes a way for the parent (NodeConfigPanel) to update a node's data in the
-  // canvas without triggering a stale debounced save that would overwrite the change.
+  // Exposes imperative helpers so the parent can sync canvas state without going
+  // through the debounced save path (which could overwrite panel changes).
   useImperativeHandle(ref, () => ({
     patchNodeData: (nodeId, patch) => {
-      clearTimeout(saveTimer.current)   // cancel any pending stale canvas save
+      clearTimeout(saveTimer.current)
       setNodes(nds => nds.map(n => n.id === nodeId ? { ...n, data: { ...n.data, ...patch } } : n))
+    },
+    deleteNode: (nodeId) => {
+      clearTimeout(saveTimer.current)
+      setNodes(nds => nds.filter(n => n.id !== nodeId && n.parentId !== nodeId))
+      setEdges(eds => eds.filter(e => e.source !== nodeId && e.target !== nodeId))
     },
   }))
 

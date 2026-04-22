@@ -42,14 +42,13 @@ export default function Orchestrations({ connection }) {
   function handleNodeUpdate(nodeId, patch) {
     if (!selected) return
     if (patch === null) {
-      // Delete node
+      canvasRef.current?.deleteNode(nodeId)
       const newNodes = selected.nodes.filter(n => n.id !== nodeId && n.parentId !== nodeId)
       const newEdges = selected.edges.filter(e => e.source !== nodeId && e.target !== nodeId)
       saveGraph(newNodes, newEdges)
       setSelectedNodeId(null)
       return
     }
-    // Cancel any stale canvas debounce and sync its internal node data
     canvasRef.current?.patchNodeData(nodeId, patch)
     const newNodes = selected.nodes.map(n => n.id === nodeId ? { ...n, data: { ...n.data, ...patch } } : n)
     saveGraph(newNodes, selected.edges)
