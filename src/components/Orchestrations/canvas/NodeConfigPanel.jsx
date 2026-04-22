@@ -122,7 +122,6 @@ export default function NodeConfigPanel({ node, connection, onUpdate, onClose })
   }
 
   function handleDelete() {
-    if (!confirm('¿Eliminar este nodo?')) return
     onUpdate(node.id, null)
     onClose()
   }
@@ -246,8 +245,22 @@ export default function NodeConfigPanel({ node, connection, onUpdate, onClose })
           </>
         )}
 
-        {/* Guardar */}
+        {/* Eliminar */}
         <div style={{ marginTop: 4 }}>
+          <button
+            onClick={handleDelete}
+            style={{
+              width: '100%', padding: '7px', borderRadius: 6,
+              border: '1px solid rgba(255,107,107,.3)', background: 'rgba(255,107,107,.08)',
+              color: 'var(--red)', fontSize: 11, fontWeight: 600, cursor: 'pointer',
+            }}
+          >
+            Eliminar nodo
+          </button>
+        </div>
+
+        {/* Guardar */}
+        <div style={{ marginTop: 10, paddingTop: 12, borderTop: '1px solid var(--border)' }}>
           <button
             onClick={handleSave}
             disabled={saving}
@@ -262,20 +275,6 @@ export default function NodeConfigPanel({ node, connection, onUpdate, onClose })
             }}
           >
             {saving ? 'Guardando…' : dirty ? '✓ Guardar cambios' : '✓ Guardar'}
-          </button>
-        </div>
-
-        {/* Eliminar */}
-        <div style={{ marginTop: 10, paddingTop: 12, borderTop: '1px solid var(--border)' }}>
-          <button
-            onClick={handleDelete}
-            style={{
-              width: '100%', padding: '7px', borderRadius: 6,
-              border: '1px solid rgba(255,107,107,.3)', background: 'rgba(255,107,107,.08)',
-              color: 'var(--red)', fontSize: 11, fontWeight: 600, cursor: 'pointer',
-            }}
-          >
-            Eliminar nodo
           </button>
         </div>
       </div>

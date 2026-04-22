@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, forwardRef, useImperativeHandle } from 'react'
+import { useCallback, useEffect, useRef, useState, useImperativeHandle } from 'react'
 import {
   ReactFlow, ReactFlowProvider, Background, Controls, MiniMap,
   useNodesState, useEdgesState, addEdge, useReactFlow, Panel,
@@ -54,11 +54,12 @@ function toRFEdges(edges, run, nodes) {
 }
 
 // ─── Inner canvas (must be inside ReactFlowProvider) ─────────────────────────
+// React 19: ref is a plain prop — no forwardRef needed
 
-const CanvasInner = forwardRef(function CanvasInner({
+function CanvasInner({
   orchId, initialNodes, initialEdges, run, isRunning,
-  onSave, onNodeSelect, onAddGroup: addGroupExternal,
-}, ref) {
+  onSave, onNodeSelect, onAddGroup: addGroupExternal, ref,
+}) {
   const [nodes, setNodes, onNodesChange] = useNodesState([])
   const [edges, setEdges, onEdgesChange] = useEdgesState([])
   const rfInstance = useReactFlow()
@@ -74,8 +75,8 @@ const CanvasInner = forwardRef(function CanvasInner({
     },
     deleteNode: (nodeId) => {
       clearTimeout(saveTimer.current)
-      // deleteElements is React Flow's proper deletion API — handles children and edges automatically
-      rfInstance.deleteElements({ nodes: [{ id: nodeId }] })
+      setNodes(nds => nds.filter(n => n.id !== nodeId && n.parentId !== nodeId))
+      setEdges(eds => eds.filter(e => e.source !== nodeId && e.target !== nodeId))
     },
   }))
 
@@ -288,12 +289,12 @@ const toolbarBtn = {
 
 // ─── Public wrapper (provides context) ───────────────────────────────────────
 
-const OrchestrationsCanvas = forwardRef(function OrchestrationsCanvas(props, ref) {
+function OrchestrationsCanvas({ ref, ...props }) {
   return (
     <ReactFlowProvider>
       <CanvasInner ref={ref} {...props} />
     </ReactFlowProvider>
   )
-})
+}
 
 export default OrchestrationsCanvas
