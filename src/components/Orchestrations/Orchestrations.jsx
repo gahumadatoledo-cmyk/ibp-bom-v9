@@ -49,8 +49,8 @@ export default function Orchestrations({ connection }) {
       setSelectedNodeId(null)
       return
     }
-    // Sync canvas internal nodes so a pending debounced save doesn't overwrite this patch
-    canvasRef.current?.patchNode(nodeId, patch)
+    // Cancel any stale canvas debounce and sync its internal node data
+    canvasRef.current?.patchNodeData(nodeId, patch)
     const newNodes = selected.nodes.map(n => n.id === nodeId ? { ...n, data: { ...n.data, ...patch } } : n)
     saveGraph(newNodes, selected.edges)
   }

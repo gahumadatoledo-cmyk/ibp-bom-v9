@@ -63,20 +63,14 @@ const CanvasInner = forwardRef(function CanvasInner({
   const [edges, setEdges, onEdgesChange] = useEdgesState([])
   const rfInstance = useReactFlow()
   const saveTimer  = useRef(null)
-  const edgesRef   = useRef([])
   const [cycleErr, setCycleErr] = useState(false)
 
-  useEffect(() => { edgesRef.current = edges }, [edges])
-
-  // Allows parent to patch a node's data and flush any stale pending canvas save
+  // Exposes a way for the parent (NodeConfigPanel) to update a node's data in the
+  // canvas without triggering a stale debounced save that would overwrite the change.
   useImperativeHandle(ref, () => ({
-    patchNode: (nodeId, patch) => {
-      setNodes(nds => {
-        const updated = nds.map(n => n.id === nodeId ? { ...n, data: { ...n.data, ...patch } } : n)
-        // Replace stale pending debounce with a fresh one using the updated nodes
-        debounced_save(updated, edgesRef.current)
-        return updated
-      })
+    patchNodeData: (nodeId, patch) => {
+      clearTimeout(saveTimer.current)   // cancel any pending stale canvas save
+      setNodes(nds => nds.map(n => n.id === nodeId ? { ...n, data: { ...n.data, ...patch } } : n))
     },
   }))
 
@@ -101,7 +95,6 @@ const CanvasInner = forwardRef(function CanvasInner({
   function debounced_save(nds, eds) {
     clearTimeout(saveTimer.current)
     saveTimer.current = setTimeout(() => {
-      // Strip RF-internal fields, keep only what backend needs
       const cleanNodes = nds.map(({ id, type, position, parentId, extent, style, data }) => ({
         id,
         type: type === 'orchTask' ? 'task' : type === 'orchGroup' ? 'group' : type,
@@ -125,7 +118,11 @@ const CanvasInner = forwardRef(function CanvasInner({
 
   function handleNodesChange(changes) {
     onNodesChange(changes)
-    setNodes(nds => { debounced_save(nds, edges); return nds })
+    // 'select' changes don't modify data or position — skip them to avoid
+    // queuing a debounced save with stale canvas data after the user clicks a node
+    if (changes.some(c => c.type !== 'select')) {
+      setNodes(nds => { debounced_save(nds, edges); return nds })
+    }
   }
 
   function handleEdgesChange(changes) {
