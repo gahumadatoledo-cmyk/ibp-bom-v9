@@ -176,11 +176,14 @@ function CanvasInner({
     const { taskName, taskGuid, type } = JSON.parse(raw)
     const position = rfInstance.screenToFlowPosition({ x: e.clientX, y: e.clientY })
 
-    // Check if dropped inside a group node
-    const groupNode = nodes.find(n => n.type === 'orchGroup' && !n.parentId && n.style && (
-      position.x >= n.position.x && position.x <= n.position.x + (n.style.width || 300) &&
-      position.y >= n.position.y && position.y <= n.position.y + (n.style.height || 200)
-    ))
+    // Check if dropped inside a group node (use measured n.width/n.height first, fall back to style)
+    const groupNode = nodes.find(n => {
+      if (n.type !== 'orchGroup' || n.parentId) return false
+      const w = n.width  || n.style?.width  || 300
+      const h = n.height || n.style?.height || 200
+      return position.x >= n.position.x && position.x <= n.position.x + w
+          && position.y >= n.position.y && position.y <= n.position.y + h
+    })
 
     const newId = crypto.randomUUID()
     const newNode = {
