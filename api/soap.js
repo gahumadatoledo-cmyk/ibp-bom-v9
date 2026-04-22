@@ -418,6 +418,9 @@ export default async function handler(req, res) {
     }
 
     const result = parseResponse(operation, text)
+    if (params._debug) {
+      return res.json({ _result: result, _rawXml: text })
+    }
     return res.json(result)
 
   } catch (e) {
