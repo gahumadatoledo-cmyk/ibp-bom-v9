@@ -17,13 +17,11 @@ const EDGE_DEFAULTS = {
   animated: false,
 }
 
-function toRFNodes(nodes, run, onSelect) {
+function toRFNodes(nodes, run, onSelect, onRunSingle) {
   return nodes.map(n => {
-    // Map storage types → React Flow node types
     const rfType = n.type === 'task' ? 'orchTask' : n.type === 'group' ? 'orchGroup' : n.type
     const ns = run?.nodes?.[n.id]
     const runStatus = ns?.status || 'pending'
-    // For group: summarize children
     let childSummary = null
     if ((rfType === 'orchGroup') && ns?.children) {
       const vals = Object.values(ns.children)
@@ -35,7 +33,7 @@ function toRFNodes(nodes, run, onSelect) {
     return {
       ...n,
       type: rfType,
-      data: { ...n.data, runStatus, sapRunId: ns?.sapRunId || null, childSummary, onSelect },
+      data: { ...n.data, runStatus, sapRunId: ns?.sapRunId || null, childSummary, onSelect, onRunSingle: rfType === 'orchTask' ? onRunSingle : undefined },
     }
   })
 }
@@ -58,7 +56,7 @@ function toRFEdges(edges, run, nodes) {
 
 function CanvasInner({
   orchId, initialNodes, initialEdges, run, isRunning,
-  onSave, onNodeSelect, onAddGroup: addGroupExternal, ref,
+  onSave, onNodeSelect, onAddGroup: addGroupExternal, onRunSingle, ref,
 }) {
   const [nodes, setNodes, onNodesChange] = useNodesState([])
   const [edges, setEdges, onEdgesChange] = useEdgesState([])
@@ -82,7 +80,7 @@ function CanvasInner({
 
   // Re-init when orchestration changes
   useEffect(() => {
-    setNodes(toRFNodes(initialNodes, run, handleNodeSelect))
+    setNodes(toRFNodes(initialNodes, run, handleNodeSelect, onRunSingle))
     setEdges(toRFEdges(initialEdges, run, initialNodes))
     setCycleErr(false)
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -91,7 +89,7 @@ function CanvasInner({
   // Merge run state without reinitializing layout
   useEffect(() => {
     if (!run) return
-    setNodes(nds => toRFNodes(nds, run, handleNodeSelect))
+    setNodes(nds => toRFNodes(nds, run, handleNodeSelect, onRunSingle))
     setEdges(eds => toRFEdges(eds, run, nodes))
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [run])

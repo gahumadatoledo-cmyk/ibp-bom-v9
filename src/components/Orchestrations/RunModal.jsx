@@ -63,18 +63,39 @@ function FieldRow({ label, count, rawData, children }) {
 }
 
 export default function RunModal({ connection, onConfirm, onClose }) {
+  const PRESETS_KEY = `ibp-presets-${connection.id}`
   const [agents,     setAgents]     = useState([])
   const [configs,    setConfigs]    = useState([])
   const [rawAgents,  setRawAgents]  = useState(null)
   const [rawConfigs, setRawConfigs] = useState(null)
   const [loading,    setLoading]    = useState(true)
   const [error,      setError]      = useState(null)
+  const [presets,    setPresets]    = useState(() => {
+    try { return JSON.parse(localStorage.getItem(PRESETS_KEY) || '[]') } catch { return [] }
+  })
 
   const [selectedAgent,  setSelectedAgent]  = useState('')
   const [selectedConfig, setSelectedConfig] = useState('')
   const [manualAgent,    setManualAgent]    = useState('')
   const [manualConfig,   setManualConfig]   = useState('')
   const [useManual,      setUseManual]      = useState(false)
+
+  function savePreset() {
+    const label = prompt('Nombre del preset:')?.trim()
+    if (!label) return
+    const agent  = useManual ? manualAgent.trim()  : selectedAgent
+    const config = useManual ? manualConfig.trim() : selectedConfig
+    const next = [...presets, { id: crypto.randomUUID(), label, agentName: agent || null, profileName: config || null }]
+    setPresets(next)
+    localStorage.setItem(PRESETS_KEY, JSON.stringify(next))
+  }
+
+  function deletePreset(e, id) {
+    e.stopPropagation()
+    const next = presets.filter(p => p.id !== id)
+    setPresets(next)
+    localStorage.setItem(PRESETS_KEY, JSON.stringify(next))
+  }
 
   useEffect(() => {
     async function load() {
@@ -136,6 +157,34 @@ export default function RunModal({ connection, onConfirm, onClose }) {
 
         {/* Body */}
         <div style={{ padding: 16 }}>
+          {/* Presets de ejecución rápida */}
+          {presets.length > 0 && (
+            <div style={{ marginBottom: 14 }}>
+              <label style={labelStyle}>Ejecución rápida</label>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {presets.map(p => (
+                  <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 0 }}>
+                    <button
+                      onClick={() => onConfirm(p.agentName, p.profileName)}
+                      style={{
+                        fontSize: 10, padding: '4px 8px', borderRadius: '4px 0 0 4px', cursor: 'pointer',
+                        background: '#34d39922', border: '1px solid #34d39944', color: '#34d399', fontWeight: 600,
+                      }}
+                    >▶ {p.label}</button>
+                    <button
+                      onClick={e => deletePreset(e, p.id)}
+                      style={{
+                        fontSize: 10, padding: '4px 5px', borderRadius: '0 4px 4px 0', cursor: 'pointer',
+                        background: 'var(--bg3)', border: '1px solid var(--border)', borderLeft: 'none',
+                        color: 'var(--text3)',
+                      }}
+                    >×</button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {loading && (
             <div style={{ textAlign: 'center', color: 'var(--text2)', fontSize: 12, padding: '24px 0' }}>
               Cargando agentes y configuraciones…
@@ -182,7 +231,7 @@ export default function RunModal({ connection, onConfirm, onClose }) {
                     <option value="">— Sin agente específico —</option>
                     {agents.map(a => (
                       <option key={a.guid || a.name} value={a.name}>
-                        {a.name}{a.agentStatus && a.agentStatus !== 'CONNECTED' ? ` (${a.agentStatus})` : ''}
+                        {a.name}{a.agentStatus && !a.agentStatus.includes('CONNECTED') ? ` (${a.agentStatus})` : ''}
                       </option>
                     ))}
                   </select>
@@ -226,6 +275,13 @@ export default function RunModal({ connection, onConfirm, onClose }) {
             border: '1px solid var(--border)', cursor: 'pointer',
           }}>
             Cancelar
+          </button>
+          <button onClick={savePreset} disabled={loading} style={{
+            padding: '6px 12px', borderRadius: 6, fontSize: 11, fontWeight: 600,
+            background: 'var(--bg3)', color: loading ? 'var(--text3)' : 'var(--text2)',
+            border: '1px solid var(--border)', cursor: loading ? 'default' : 'pointer',
+          }}>
+            Guardar preset
           </button>
           <button
             onClick={handleConfirm}

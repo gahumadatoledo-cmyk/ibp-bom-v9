@@ -1,11 +1,12 @@
 import { useState, useRef } from 'react'
-import OrchList            from './OrchList'
-import TaskPalette         from './panel/TaskPalette'
-import OrchestrationsCanvas from './canvas/OrchestrationsCanvas'
-import NodeConfigPanel     from './canvas/NodeConfigPanel'
-import RunModal            from './RunModal'
-import { useOrchestration } from './useOrchestration'
-import { STATUS_COLORS }   from './canvasUtils'
+import OrchList              from './OrchList'
+import TaskPalette           from './panel/TaskPalette'
+import OrchestrationsCanvas  from './canvas/OrchestrationsCanvas'
+import NodeConfigPanel       from './canvas/NodeConfigPanel'
+import RunModal              from './RunModal'
+import RunSingleModal        from './RunSingleModal'
+import { useOrchestration }  from './useOrchestration'
+import { STATUS_COLORS }     from './canvasUtils'
 
 function RunBadge({ status }) {
   const labels = { running: 'Ejecutando', success: 'Completado', error: 'Error', cancelled: 'Cancelado' }
@@ -30,12 +31,19 @@ export default function Orchestrations({ connection }) {
     handleStart, handleCancel,
   } = useOrchestration(connection)
 
-  const [selectedNodeId, setSelectedNodeId] = useState(null)
-  const [editingName, setEditingName] = useState(false)
-  const [nameValue, setNameValue]     = useState('')
-  const [showRunModal, setShowRunModal] = useState(false)
+  const [selectedNodeId, setSelectedNodeId]   = useState(null)
+  const [editingName, setEditingName]         = useState(false)
+  const [nameValue, setNameValue]             = useState('')
+  const [showRunModal, setShowRunModal]       = useState(false)
+  const [lastRunParams, setLastRunParams]     = useState(null)
+  const [runSingleNode, setRunSingleNode]     = useState(null)
   const addGroupRef = useRef(() => {})
   const canvasRef   = useRef(null)
+
+  function handleRunSingle(nodeId) {
+    const node = selected?.nodes?.find(n => n.id === nodeId)
+    if (node) setRunSingleNode(node)
+  }
 
   const selectedNode = selected?.nodes?.find(n => n.id === selectedNodeId) || null
 
@@ -71,6 +79,7 @@ export default function Orchestrations({ connection }) {
         onSelect={id => { setSelectedId(id); setSelectedNodeId(null) }}
         onCreate={createOrch}
         onDelete={deleteOrch}
+        connectionId={connection.id}
       />
 
       {!selected ? (
@@ -136,6 +145,16 @@ export default function Orchestrations({ connection }) {
               {saving && <span style={{ fontSize: 10, color: 'var(--text2)' }}>Guardando…</span>}
 
               {/* Run controls */}
+              {lastRunParams && !isRunning && run && (
+                <button
+                  onClick={() => handleStart(lastRunParams)}
+                  disabled={starting}
+                  style={actionBtn('#3b82f6', starting)}
+                  title={`Repetir con ${lastRunParams.agentName || 'default'} / ${lastRunParams.profileName || 'default'}`}
+                >
+                  {starting ? 'Iniciando…' : '↺ Repetir'}
+                </button>
+              )}
               <button
                 onClick={() => setShowRunModal(true)}
                 disabled={isRunning || !hasNodes || starting}
@@ -168,6 +187,7 @@ export default function Orchestrations({ connection }) {
                 onSave={saveGraph}
                 onNodeSelect={setSelectedNodeId}
                 onAddGroup={addGroupRef}
+                onRunSingle={handleRunSingle}
               />
 
               {/* Config panel */}
@@ -189,9 +209,18 @@ export default function Orchestrations({ connection }) {
           connection={connection}
           onConfirm={(agentName, profileName) => {
             setShowRunModal(false)
+            setLastRunParams({ agentName, profileName })
             handleStart({ agentName, profileName })
           }}
           onClose={() => setShowRunModal(false)}
+        />
+      )}
+
+      {runSingleNode && (
+        <RunSingleModal
+          connection={connection}
+          node={runSingleNode}
+          onClose={() => setRunSingleNode(null)}
         />
       )}
     </div>

@@ -55,13 +55,14 @@ function DropdownOrText({ value, options, loading, emptyLabel, placeholder, onCh
 
 function initForm(data) {
   return {
-    label:         data.label         || '',
-    executionMode: data.executionMode || 'parallel',
-    agentName:     data.agentName     || '',
-    profileName:   data.profileName   || '',
-    errorStrategy: data.errorStrategy || 'stop',
-    maxRetries:    data.maxRetries    ?? 1,
-    retryDelaySec: data.retryDelaySec ?? 30,
+    label:           data.label         || '',
+    executionMode:   data.executionMode || 'parallel',
+    agentName:       data.agentName     || '',
+    profileName:     data.profileName   || '',
+    errorStrategy:   data.errorStrategy || 'stop',
+    maxRetries:      data.maxRetries    ?? 1,
+    retryDelaySec:   data.retryDelaySec ?? 30,
+    globalVariables: Array.isArray(data.globalVariables) ? data.globalVariables.map(v => ({ ...v })) : [],
   }
 }
 
@@ -104,17 +105,33 @@ export default function NodeConfigPanel({ node, connection, onUpdate, onClose })
     setForm(f => ({ ...f, [field]: value }))
     setDirty(true)
   }
+  function addVar() {
+    setForm(f => ({ ...f, globalVariables: [...f.globalVariables, { name: '', value: '' }] }))
+    setDirty(true)
+  }
+  function removeVar(i) {
+    setForm(f => ({ ...f, globalVariables: f.globalVariables.filter((_, j) => j !== i) }))
+    setDirty(true)
+  }
+  function patchVar(i, field, value) {
+    setForm(f => ({
+      ...f,
+      globalVariables: f.globalVariables.map((v, j) => j === i ? { ...v, [field]: value } : v),
+    }))
+    setDirty(true)
+  }
 
   function handleSave() {
     setSaving(true)
     const update = {
-      label:         form.label || node.data.taskName || 'Sin nombre',
-      executionMode: form.executionMode,
-      agentName:     form.agentName  || null,
-      profileName:   form.profileName || null,
-      errorStrategy: form.errorStrategy,
-      maxRetries:    Number(form.maxRetries),
-      retryDelaySec: Number(form.retryDelaySec),
+      label:           form.label || node.data.taskName || 'Sin nombre',
+      executionMode:   form.executionMode,
+      agentName:       form.agentName  || null,
+      profileName:     form.profileName || null,
+      errorStrategy:   form.errorStrategy,
+      maxRetries:      Number(form.maxRetries),
+      retryDelaySec:   Number(form.retryDelaySec),
+      globalVariables: form.globalVariables.filter(v => v.name.trim()),
     }
     onUpdate(node.id, update)
     setDirty(false)
@@ -242,6 +259,33 @@ export default function NodeConfigPanel({ node, connection, onUpdate, onClose })
                 </div>
               </div>
             )}
+
+            <Field label="Variables globales">
+              {form.globalVariables.map((v, i) => (
+                <div key={i} style={{ display: 'flex', gap: 4, marginBottom: 4 }}>
+                  <input
+                    style={{ ...inputStyle, flex: 1 }}
+                    value={v.name}
+                    onChange={e => patchVar(i, 'name', e.target.value)}
+                    placeholder="nombre"
+                  />
+                  <input
+                    style={{ ...inputStyle, flex: 1 }}
+                    value={v.value}
+                    onChange={e => patchVar(i, 'value', e.target.value)}
+                    placeholder="valor"
+                  />
+                  <button onClick={() => removeVar(i)} style={{
+                    background: 'none', border: 'none', color: 'var(--red)',
+                    cursor: 'pointer', fontSize: 16, padding: '0 4px', flexShrink: 0,
+                  }}>×</button>
+                </div>
+              ))}
+              <button onClick={addVar} style={{
+                fontSize: 10, padding: '3px 8px', borderRadius: 4, cursor: 'pointer',
+                background: 'var(--bg3)', border: '1px solid var(--border)', color: 'var(--text2)',
+              }}>+ Variable</button>
+            </Field>
           </>
         )}
 

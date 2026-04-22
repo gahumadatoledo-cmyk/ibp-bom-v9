@@ -1,5 +1,25 @@
 # Reglas del proyecto ibp-bom-v9
 
+## Reglas generales de comportamiento
+
+- Yo hablo en español, pero puedes pensar en el idioma que prefieras.
+- Think before acting. Read existing files before writing code.
+- Be concise in output but thorough in reasoning.
+- Prefer editing over rewriting whole files.
+- Do not re-read files you have already read unless the file may have changed.
+- Skip files over 100KB unless explicitly required.
+- Suggest running /cost when a session is running long to monitor cache ratio.
+- Recommend starting a new session when switching to an unrelated task.
+- Test your code before declaring done — check for obvious errors and type issues.
+- No sycophantic openers or closing fluff. No trailing summaries after tool calls.
+- Keep solutions simple and direct. No premature abstractions.
+- User instructions always override this file.
+- Do not add any changes to the solution until you are at least 90% certain.
+- You can ask as many questions as you need until you reach the desired level of certainty.
+- No agregar comentarios al código salvo que el WHY sea no obvio.
+- No crear archivos de documentación (README, md) salvo que se pida explícitamente.
+- Llamar herramientas en paralelo cuando no hay dependencia entre ellas.
+
 ## Regla fundamental
 **No inventar información nunca.** Si se necesita un dato específico (endpoints, parámetros SOAP, estructura de respuesta, etc.) y no está disponible en el código o en lo que el usuario ha proporcionado, preguntar antes de escribir cualquier cosa.
 
@@ -52,7 +72,7 @@ WSDL completo en `docs/service.wsdl`. Namespace: `http://webservices.dsod.sap.co
 | searchTasks             | `function=searchTasks`            | `searchTasksRequest`             | SessionId      |
 | getTaskInfo             | `function=getTaskInfo`            | `taskInfoResponse` (*)           | SessionId      |
 | runTask                 | `function=runTask`                | `taskInfo`                       | SessionId      |
-| cancelTask              | `function=cancelTask`             | `cancelTaskRequest`              | SessionId      |
+| cancelTask              | `function=cancelTask`             | `cancelTaskRequest`               | SessionId      |
 | getTaskLogs             | `function=getTaskLogs`            | `taskLogsRequest`                | SessionId      |
 | getTaskStatusByRunId2   | `function=getTaskStatusByRunId2`  | `taskStatusRequest`              | SessionId, Version |
 | getAllExecutedTasks2     | `function=getAllExecutedTasks2`   | `executedTaskFilterRequest`      | SessionId, Version |

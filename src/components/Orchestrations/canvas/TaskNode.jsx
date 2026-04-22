@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Handle, Position } from '@xyflow/react'
 import { STATUS_COLORS, STATUS_ICONS } from '../canvasUtils'
 
@@ -5,6 +6,7 @@ const STRATEGY_COLOR = { stop: '#64748b', continue: '#fbbf24', retry: '#3b82f6' 
 const STRATEGY_LABEL = { stop: 'err: stop', continue: 'err: continuar', retry: 'err: reintentar' }
 
 export default function TaskNode({ data, selected, id }) {
+  const [hovered, setHovered] = useState(false)
   const status  = data.runStatus || 'pending'
   const color   = STATUS_COLORS[status]
   const icon    = STATUS_ICONS[status]
@@ -13,6 +15,8 @@ export default function TaskNode({ data, selected, id }) {
   return (
     <div
       onClick={() => data.onSelect?.(id)}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
       style={{
         width: 210, background: 'var(--bg2)',
         border: `1.5px solid ${selected ? 'var(--accent)' : isActive ? '#3b82f6' : 'var(--border2)'}`,
@@ -24,16 +28,13 @@ export default function TaskNode({ data, selected, id }) {
     >
       {/* Status bar */}
       <div style={{
-        height: 3,
-        background: color,
-        transition: 'background .3s',
+        height: 3, background: color, transition: 'background .3s',
         ...(isActive ? { animation: 'shimmer 1.5s infinite' } : {}),
       }} />
 
       {/* Header */}
       <div style={{
-        padding: '8px 10px 6px',
-        background: 'var(--bg3)',
+        padding: '8px 10px 6px', background: 'var(--bg3)',
         display: 'flex', alignItems: 'center', gap: 6,
       }}>
         <span style={{ fontSize: 11, color, fontWeight: 700, flexShrink: 0, fontFamily: 'var(--mono)' }}>
@@ -45,6 +46,17 @@ export default function TaskNode({ data, selected, id }) {
         }} title={data.taskName}>
           {data.label || data.taskName}
         </span>
+        {hovered && data.onRunSingle && (
+          <button
+            onClick={e => { e.stopPropagation(); data.onRunSingle(id) }}
+            title="Ejecutar solo este task"
+            style={{
+              background: '#34d39922', border: '1px solid #34d39944', borderRadius: 4,
+              color: '#34d399', fontSize: 9, fontWeight: 700, padding: '2px 5px',
+              cursor: 'pointer', flexShrink: 0, lineHeight: 1,
+            }}
+          >▶</button>
+        )}
       </div>
 
       {/* Details */}
@@ -53,6 +65,11 @@ export default function TaskNode({ data, selected, id }) {
           <div style={{ fontSize: 9, color: 'var(--text3)', fontFamily: 'var(--mono)', display: 'flex', gap: 4, flexWrap: 'wrap' }}>
             {data.agentName   && <span>agent: {data.agentName}</span>}
             {data.profileName && <span>profile: {data.profileName}</span>}
+          </div>
+        )}
+        {(data.globalVariables || []).filter(v => v.name).length > 0 && (
+          <div style={{ fontSize: 9, color: 'var(--text3)', fontFamily: 'var(--mono)' }}>
+            vars: {(data.globalVariables).filter(v => v.name).length}
           </div>
         )}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -78,7 +95,6 @@ export default function TaskNode({ data, selected, id }) {
         )}
       </div>
 
-      {/* Handles */}
       <Handle
         type="target" position={Position.Left}
         style={{ background: 'var(--border2)', width: 8, height: 8, border: '1.5px solid var(--text3)' }}
