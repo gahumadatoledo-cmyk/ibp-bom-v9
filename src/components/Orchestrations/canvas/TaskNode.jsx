@@ -3,7 +3,7 @@ import { Handle, Position } from '@xyflow/react'
 import { STATUS_COLORS, STATUS_ICONS } from '../canvasUtils'
 
 const STRATEGY_COLOR = { stop: '#64748b', continue: '#fbbf24', retry: '#3b82f6' }
-const STRATEGY_LABEL = { stop: 'err: stop', continue: 'err: continuar', retry: 'err: reintentar' }
+const STRATEGY_LABEL = { stop: 'error: detener', continue: 'error: continuar', retry: 'error: reintentar' }
 
 export default function TaskNode({ data, selected, id }) {
   const [hovered, setHovered] = useState(false)
