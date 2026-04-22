@@ -5,6 +5,7 @@ import OrchestrationsCanvas  from './canvas/OrchestrationsCanvas'
 import NodeConfigPanel       from './canvas/NodeConfigPanel'
 import RunModal              from './RunModal'
 import RunSingleModal        from './RunSingleModal'
+import RunLogModal           from './RunLogModal'
 import { useOrchestration }  from './useOrchestration'
 import { STATUS_COLORS }     from './canvasUtils'
 
@@ -35,8 +36,10 @@ export default function Orchestrations({ connection }) {
   const [editingName, setEditingName]         = useState(false)
   const [nameValue, setNameValue]             = useState('')
   const [showRunModal, setShowRunModal]       = useState(false)
+  const [showLogModal, setShowLogModal]       = useState(false)
   const [lastRunParams, setLastRunParams]     = useState(null)
   const [runSingleNode, setRunSingleNode]     = useState(null)
+  const [paletteCollapsed, setPaletteCollapsed] = useState(false)
   const addGroupRef = useRef(() => {})
   const canvasRef   = useRef(null)
 
@@ -95,6 +98,8 @@ export default function Orchestrations({ connection }) {
           <TaskPalette
             connection={connection}
             onAddGroup={() => addGroupRef.current?.()}
+            collapsed={paletteCollapsed}
+            onToggle={() => setPaletteCollapsed(v => !v)}
           />
 
           {/* ── Canvas area ──────────────────────────────────────────────────── */}
@@ -145,6 +150,16 @@ export default function Orchestrations({ connection }) {
               {saving && <span style={{ fontSize: 10, color: 'var(--text2)' }}>Guardando…</span>}
 
               {/* Run controls */}
+              {run && (
+                <button
+                  onClick={() => setShowLogModal(true)}
+                  style={actionBtn('#a78bfa', false)}
+                  title="Ver log de la última ejecución"
+                >
+                  📋 Log
+                </button>
+              )}
+
               {lastRunParams && !isRunning && run && (
                 <button
                   onClick={() => handleStart(lastRunParams)}
@@ -221,6 +236,15 @@ export default function Orchestrations({ connection }) {
           connection={connection}
           node={runSingleNode}
           onClose={() => setRunSingleNode(null)}
+        />
+      )}
+
+      {showLogModal && run && (
+        <RunLogModal
+          run={run}
+          connection={connection}
+          nodes={selected?.nodes || []}
+          onClose={() => setShowLogModal(false)}
         />
       )}
     </div>

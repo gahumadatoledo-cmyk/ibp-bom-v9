@@ -42,8 +42,8 @@ export default function TaskNode({ data, selected, id }) {
         </span>
         <span style={{
           fontSize: 11, fontWeight: 700, color: 'var(--text)',
-          flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-        }} title={data.taskName}>
+          flex: 1, wordBreak: 'break-word', lineHeight: 1.35,
+        }}>
           {data.label || data.taskName}
         </span>
         {hovered && data.onRunSingle && (

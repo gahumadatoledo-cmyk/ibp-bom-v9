@@ -50,7 +50,7 @@ function DragChip({ task, style }) {
   )
 }
 
-export default function TaskPalette({ connection, onAddGroup }) {
+export default function TaskPalette({ connection, onAddGroup, collapsed = false, onToggle }) {
   const [projects, setProjects]     = useState([])
   const [expanded, setExpanded]     = useState({})
   const [tasks, setTasks]           = useState({})
@@ -90,6 +90,26 @@ export default function TaskPalette({ connection, onAddGroup }) {
       })
     : projects
 
+  if (collapsed) {
+    return (
+      <div
+        onClick={onToggle}
+        title="Expandir panel de tasks"
+        style={{
+          width: 28, flexShrink: 0, borderRight: '1px solid var(--border)',
+          display: 'flex', flexDirection: 'column', alignItems: 'center',
+          background: 'var(--bg2)', cursor: 'pointer', userSelect: 'none',
+          paddingTop: 12, gap: 8,
+        }}
+      >
+        <span style={{ fontSize: 10, color: 'var(--text3)', writingMode: 'vertical-rl', letterSpacing: '0.1em', transform: 'rotate(180deg)' }}>
+          TASKS
+        </span>
+        <span style={{ fontSize: 14, color: 'var(--text3)' }}>›</span>
+      </div>
+    )
+  }
+
   return (
     <div style={{
       width: 210, flexShrink: 0, borderRight: '1px solid var(--border)',
@@ -98,8 +118,15 @@ export default function TaskPalette({ connection, onAddGroup }) {
     }}>
       {/* Header */}
       <div style={{ padding: '10px 12px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
-        <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text2)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>
-          Task Palette
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+          <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text2)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+            Task Palette
+          </div>
+          <button
+            onClick={onToggle}
+            title="Contraer panel"
+            style={{ background: 'none', border: 'none', color: 'var(--text3)', cursor: 'pointer', fontSize: 12, lineHeight: 1, padding: '0 2px' }}
+          >‹</button>
         </div>
         <input
           type="text"
