@@ -2,10 +2,13 @@ import { Handle, Position, NodeResizer } from '@xyflow/react'
 import { STATUS_COLORS, STATUS_ICONS } from '../canvasUtils'
 
 export default function GroupNode({ data, selected, id }) {
-  const status   = data.runStatus || 'pending'
-  const color    = STATUS_COLORS[status]
-  const icon     = STATUS_ICONS[status]
-  const isActive = status === 'running'
+  const status    = data.runStatus || 'pending'
+  const color     = STATUS_COLORS[status]
+  const icon      = STATUS_ICONS[status]
+  const isActive  = status === 'running'
+  const isSerial  = data.executionMode === 'serial'
+  const modeColor = isSerial ? '#F7A800' : '#29ABE2'
+  const modeLabel = isSerial ? '→ Serial' : '⊞ Paralelo'
 
   return (
     <div
@@ -36,11 +39,16 @@ export default function GroupNode({ data, selected, id }) {
           {isActive ? '◉' : '⊞'}
         </span>
         <span style={{
-          fontSize: 11, fontWeight: 700, color: '#29ABE2',
+          fontSize: 11, fontWeight: 700, color: modeColor,
           flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
         }}>
           {data.label || 'Grupo paralelo'}
         </span>
+        <span style={{
+          fontSize: 9, padding: '1px 5px', borderRadius: 6,
+          background: modeColor + '22', color: modeColor, border: `1px solid ${modeColor}44`,
+          fontFamily: 'var(--mono)', flexShrink: 0, marginRight: 4,
+        }}>{modeLabel}</span>
         <span style={{
           fontSize: 9, padding: '1px 5px', borderRadius: 6,
           background: color + '22', color, border: `1px solid ${color}44`,

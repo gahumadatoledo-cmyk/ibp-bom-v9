@@ -123,14 +123,17 @@ export function useOrchestration(connection) {
     } catch (e) { alert(e.message) }
   }
 
-  async function handleStart() {
+  async function handleStart({ agentName = null, profileName = null } = {}) {
     if (!selectedId || isRunning || starting) return
     setStarting(true)
     try {
       const res = await fetch('/api/orchestrate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ orchestrationId: selectedId, action: 'start' }),
+        body: JSON.stringify({
+          orchestrationId: selectedId, action: 'start',
+          defaultAgent: agentName || null, defaultProfile: profileName || null,
+        }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)

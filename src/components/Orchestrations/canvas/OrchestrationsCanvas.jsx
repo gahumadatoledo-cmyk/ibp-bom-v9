@@ -93,6 +93,7 @@ function CanvasInner({
           agentName: data.agentName, profileName: data.profileName,
           errorStrategy: data.errorStrategy, maxRetries: data.maxRetries,
           retryDelaySec: data.retryDelaySec,
+          executionMode: data.executionMode || 'parallel',
           globalVariables: data.globalVariables || [],
           children: data.children || [],
         },
@@ -175,6 +176,7 @@ function CanvasInner({
       style: { width: 300, height: 180 },
       data: {
         label: 'Grupo paralelo', children: [],
+        executionMode: 'parallel',
         runStatus: 'pending', onSelect: handleNodeSelect,
       },
     }

@@ -3,6 +3,7 @@ import OrchList            from './OrchList'
 import TaskPalette         from './panel/TaskPalette'
 import OrchestrationsCanvas from './canvas/OrchestrationsCanvas'
 import NodeConfigPanel     from './canvas/NodeConfigPanel'
+import RunModal            from './RunModal'
 import { useOrchestration } from './useOrchestration'
 import { STATUS_COLORS }   from './canvasUtils'
 
@@ -32,6 +33,7 @@ export default function Orchestrations({ connection }) {
   const [selectedNodeId, setSelectedNodeId] = useState(null)
   const [editingName, setEditingName] = useState(false)
   const [nameValue, setNameValue]     = useState('')
+  const [showRunModal, setShowRunModal] = useState(false)
   const addGroupRef = useRef(() => {})
 
   const selectedNode = selected?.nodes?.find(n => n.id === selectedNodeId) || null
@@ -133,7 +135,7 @@ export default function Orchestrations({ connection }) {
 
               {/* Run controls */}
               <button
-                onClick={handleStart}
+                onClick={() => setShowRunModal(true)}
                 disabled={isRunning || !hasNodes || starting}
                 style={actionBtn('#34d399', isRunning || !hasNodes || starting)}
               >
@@ -176,6 +178,17 @@ export default function Orchestrations({ connection }) {
             </div>
           </div>
         </>
+      )}
+
+      {showRunModal && (
+        <RunModal
+          connection={connection}
+          onConfirm={(agentName, profileName) => {
+            setShowRunModal(false)
+            handleStart({ agentName, profileName })
+          }}
+          onClose={() => setShowRunModal(false)}
+        />
       )}
     </div>
   )

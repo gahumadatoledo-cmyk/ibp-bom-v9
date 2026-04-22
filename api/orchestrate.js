@@ -138,11 +138,11 @@ function initNodeState(node, allNodes) {
 
 // ─── Task execution helpers ───────────────────────────────────────────────────
 
-async function launchTask(connectionId, nodeDef) {
+async function launchTask(connectionId, nodeDef, defaults = {}) {
   const result = await soapRequest(connectionId, 'runTask', {
     taskName:        nodeDef.data.taskName,
-    agentName:       nodeDef.data.agentName    || undefined,
-    profileName:     nodeDef.data.profileName  || undefined,
+    agentName:       nodeDef.data.agentName   || defaults.agentName  || undefined,
+    profileName:     nodeDef.data.profileName || defaults.profileName || undefined,
     globalVariables: nodeDef.data.globalVariables || [],
   })
   if (!result.runId) throw new Error('SAP no retornó runId')
@@ -158,6 +158,8 @@ async function pollSapStatus(connectionId, sapRunId) {
 
 async function executeWave(run, waveIndex, allNodes) {
   const waveNodeIds = run.waves[waveIndex]
+  const defaults = { agentName: run.defaultAgent, profileName: run.defaultProfile }
+
   await Promise.allSettled(waveNodeIds.map(async nodeId => {
     const nodeDef = allNodes.find(n => n.id === nodeId)
     if (!nodeDef) return
@@ -165,7 +167,7 @@ async function executeWave(run, waveIndex, allNodes) {
 
     if (nodeDef.type === 'task') {
       ns.status = 'running'; ns.startedAt = new Date().toISOString()
-      try { ns.sapRunId = await launchTask(run.connectionId, nodeDef) }
+      try { ns.sapRunId = await launchTask(run.connectionId, nodeDef, defaults) }
       catch (e) { ns.status = 'error'; ns.finishedAt = new Date().toISOString(); ns.error = e.message }
 
     } else if (nodeDef.type === 'group') {
@@ -174,13 +176,25 @@ async function executeWave(run, waveIndex, allNodes) {
       if (children.length === 0) {
         ns.status = 'success'; ns.finishedAt = new Date().toISOString(); return
       }
-      await Promise.allSettled(children.map(async child => {
-        const cs = ns.children[child.id]
-        if (!cs) return
-        cs.status = 'running'; cs.startedAt = new Date().toISOString()
-        try { cs.sapRunId = await launchTask(run.connectionId, child) }
-        catch (e) { cs.status = 'error'; cs.finishedAt = new Date().toISOString(); cs.error = e.message }
-      }))
+      const isSerial = nodeDef.data?.executionMode === 'serial'
+      if (isSerial) {
+        // Launch only the first pending child
+        const firstChild = children[0]
+        const cs = ns.children[firstChild.id]
+        if (cs && cs.status === 'pending') {
+          cs.status = 'running'; cs.startedAt = new Date().toISOString()
+          try { cs.sapRunId = await launchTask(run.connectionId, firstChild, defaults) }
+          catch (e) { cs.status = 'error'; cs.finishedAt = new Date().toISOString(); cs.error = e.message }
+        }
+      } else {
+        await Promise.allSettled(children.map(async child => {
+          const cs = ns.children[child.id]
+          if (!cs) return
+          cs.status = 'running'; cs.startedAt = new Date().toISOString()
+          try { cs.sapRunId = await launchTask(run.connectionId, child, defaults) }
+          catch (e) { cs.status = 'error'; cs.finishedAt = new Date().toISOString(); cs.error = e.message }
+        }))
+      }
     }
   }))
   return run
@@ -206,10 +220,11 @@ function applyTaskResult(ns, code, strategy, maxRetries, retryDelaySec) {
 
 async function pollTaskNode(run, nodeId, nodeDef) {
   const ns = run.nodes[nodeId]
+  const defaults = { agentName: run.defaultAgent, profileName: run.defaultProfile }
   // Re-launch if pending retry and delay elapsed
   if (ns.status === 'pending' && ns.retryAt && new Date(ns.retryAt).getTime() <= Date.now()) {
     ns.status = 'running'; ns.retryAt = null; ns.sapRunId = null
-    try { ns.sapRunId = await launchTask(run.connectionId, nodeDef) }
+    try { ns.sapRunId = await launchTask(run.connectionId, nodeDef, defaults) }
     catch (e) { ns.status = 'error'; ns.finishedAt = new Date().toISOString(); ns.error = e.message }
     return
   }
@@ -223,19 +238,40 @@ async function pollTaskNode(run, nodeId, nodeDef) {
     nodeDef.data?.retryDelaySec || 30)
 }
 
-async function pollGroupNode(run, nodeId, allNodes) {
+async function pollGroupNode(run, nodeId, nodeDef, allNodes) {
   const ns = run.nodes[nodeId]
   if (!['running', 'pending'].includes(ns.status)) return
   const children = allNodes.filter(n => n.parentId === nodeId)
   if (children.length === 0) { ns.status = 'success'; ns.finishedAt = new Date().toISOString(); return }
 
-  await Promise.allSettled(children.map(async child => {
+  const isSerial = nodeDef.data?.executionMode === 'serial'
+  const defaults = { agentName: run.defaultAgent, profileName: run.defaultProfile }
+
+  if (isSerial) {
+    // Find the currently active child (first non-done)
+    const activeIdx = children.findIndex(c => !DONE_NODE.has(ns.children[c.id]?.status))
+    if (activeIdx === -1) {
+      // All done
+      const anyErr = children.some(c => ns.children[c.id]?.status === 'error')
+      ns.status = anyErr ? 'error' : 'success'
+      ns.finishedAt = new Date().toISOString()
+      return
+    }
+    const child = children[activeIdx]
     const cs = ns.children[child.id]
     if (!cs) return
+
     // Retry re-launch
     if (cs.status === 'pending' && cs.retryAt && new Date(cs.retryAt).getTime() <= Date.now()) {
       cs.retryAt = null
-      try { cs.sapRunId = await launchTask(run.connectionId, child); cs.status = 'running' }
+      try { cs.sapRunId = await launchTask(run.connectionId, child, defaults); cs.status = 'running' }
+      catch (e) { cs.status = 'error'; cs.finishedAt = new Date().toISOString(); cs.error = e.message }
+      return
+    }
+    // Launch if this child hasn't started yet
+    if (cs.status === 'pending' && !cs.sapRunId) {
+      cs.status = 'running'; cs.startedAt = new Date().toISOString()
+      try { cs.sapRunId = await launchTask(run.connectionId, child, defaults) }
       catch (e) { cs.status = 'error'; cs.finishedAt = new Date().toISOString(); cs.error = e.message }
       return
     }
@@ -247,19 +283,46 @@ async function pollGroupNode(run, nodeId, allNodes) {
       child.data?.errorStrategy || 'stop',
       child.data?.maxRetries    || 0,
       child.data?.retryDelaySec || 30)
-  }))
+    // If this child errored with stop strategy, mark remaining children as skipped
+    if (cs.status === 'error' && (child.data?.errorStrategy || 'stop') === 'stop') {
+      for (const remaining of children.slice(activeIdx + 1)) {
+        if (ns.children[remaining.id]) ns.children[remaining.id].status = 'skipped'
+      }
+      ns.status = 'error'; ns.finishedAt = new Date().toISOString()
+    }
+  } else {
+    await Promise.allSettled(children.map(async child => {
+      const cs = ns.children[child.id]
+      if (!cs) return
+      // Retry re-launch
+      if (cs.status === 'pending' && cs.retryAt && new Date(cs.retryAt).getTime() <= Date.now()) {
+        cs.retryAt = null
+        try { cs.sapRunId = await launchTask(run.connectionId, child, defaults); cs.status = 'running' }
+        catch (e) { cs.status = 'error'; cs.finishedAt = new Date().toISOString(); cs.error = e.message }
+        return
+      }
+      if (cs.status !== 'running' || !cs.sapRunId) return
+      let code
+      try { code = await pollSapStatus(run.connectionId, cs.sapRunId) }
+      catch { return }
+      applyTaskResult(cs, code,
+        child.data?.errorStrategy || 'stop',
+        child.data?.maxRetries    || 0,
+        child.data?.retryDelaySec || 30)
+    }))
 
-  const allDone = children.every(c => DONE_NODE.has(ns.children[c.id]?.status))
-  if (allDone) {
-    const anyErr = children.some(c => ns.children[c.id]?.status === 'error')
-    ns.status = anyErr ? 'error' : 'success'
-    ns.finishedAt = new Date().toISOString()
+    const allDone = children.every(c => DONE_NODE.has(ns.children[c.id]?.status))
+    if (allDone) {
+      const anyErr = children.some(c => ns.children[c.id]?.status === 'error')
+      ns.status = anyErr ? 'error' : 'success'
+      ns.finishedAt = new Date().toISOString()
+    }
   }
 }
 
 // ─── Start run ────────────────────────────────────────────────────────────────
 
-async function startRun(orchestrationId) {
+async function startRun(orchestrationId, defaultAgent = null, defaultProfile = null) {
   const orch = await getOrchestration(orchestrationId)
   if (!orch) throw new Error('Orquestación no encontrada')
 
@@ -280,6 +343,7 @@ async function startRun(orchestrationId) {
     orchestrationId, connectionId: orch.connectionId,
     status: 'running', currentWave: 0,
     startedAt: new Date().toISOString(), finishedAt: null,
+    defaultAgent: defaultAgent || null, defaultProfile: defaultProfile || null,
     waves,
     nodes: Object.fromEntries(nodes.map(n => [n.id, initNodeState(n, nodes)])),
   }
@@ -310,7 +374,7 @@ async function tick(orchestrationId) {
     const nodeDef = nodes.find(n => n.id === nodeId)
     if (!nodeDef) return
     if (nodeDef.type === 'task')  await pollTaskNode(run, nodeId, nodeDef)
-    if (nodeDef.type === 'group') await pollGroupNode(run, nodeId, nodes)
+    if (nodeDef.type === 'group') await pollGroupNode(run, nodeId, nodeDef, nodes)
   }))
 
   // Check if wave is complete
@@ -396,10 +460,10 @@ export default async function handler(req, res) {
 
   try {
     if (req.method === 'POST') {
-      const { orchestrationId, action } = req.body || {}
+      const { orchestrationId, action, defaultAgent, defaultProfile } = req.body || {}
       if (!orchestrationId) return res.status(400).json({ error: 'orchestrationId requerido' })
       if (action !== 'start') return res.status(400).json({ error: 'action debe ser "start"' })
-      const run = await startRun(orchestrationId)
+      const run = await startRun(orchestrationId, defaultAgent || null, defaultProfile || null)
       return res.status(201).json(run)
     }
 
