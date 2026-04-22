@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, forwardRef, useImperativeHandle } from 'react'
 import {
   ReactFlow, ReactFlowProvider, Background, Controls, MiniMap,
   useNodesState, useEdgesState, addEdge, useReactFlow, Panel,
@@ -55,15 +55,25 @@ function toRFEdges(edges, run, nodes) {
 
 // ─── Inner canvas (must be inside ReactFlowProvider) ─────────────────────────
 
-function CanvasInner({
+const CanvasInner = forwardRef(function CanvasInner({
   orchId, initialNodes, initialEdges, run, isRunning,
   onSave, onNodeSelect, onAddGroup: addGroupExternal,
-}) {
+}, ref) {
   const [nodes, setNodes, onNodesChange] = useNodesState([])
   const [edges, setEdges, onEdgesChange] = useEdgesState([])
   const rfInstance = useReactFlow()
   const saveTimer  = useRef(null)
   const [cycleErr, setCycleErr] = useState(false)
+
+  // Allows parent to patch a node's data without losing canvas position state
+  useImperativeHandle(ref, () => ({
+    patchNode: (nodeId, patch) => {
+      clearTimeout(saveTimer.current)
+      setNodes(nds => nds.map(n =>
+        n.id === nodeId ? { ...n, data: { ...n.data, ...patch } } : n
+      ))
+    },
+  }))
 
   // Re-init when orchestration changes
   useEffect(() => {
@@ -271,10 +281,12 @@ const toolbarBtn = {
 
 // ─── Public wrapper (provides context) ───────────────────────────────────────
 
-export default function OrchestrationsCanvas(props) {
+const OrchestrationsCanvas = forwardRef(function OrchestrationsCanvas(props, ref) {
   return (
     <ReactFlowProvider>
-      <CanvasInner {...props} />
+      <CanvasInner ref={ref} {...props} />
     </ReactFlowProvider>
   )
-}
+})
+
+export default OrchestrationsCanvas

@@ -35,6 +35,7 @@ export default function Orchestrations({ connection }) {
   const [nameValue, setNameValue]     = useState('')
   const [showRunModal, setShowRunModal] = useState(false)
   const addGroupRef = useRef(() => {})
+  const canvasRef   = useRef(null)
 
   const selectedNode = selected?.nodes?.find(n => n.id === selectedNodeId) || null
 
@@ -48,6 +49,8 @@ export default function Orchestrations({ connection }) {
       setSelectedNodeId(null)
       return
     }
+    // Sync canvas internal nodes so a pending debounced save doesn't overwrite this patch
+    canvasRef.current?.patchNode(nodeId, patch)
     const newNodes = selected.nodes.map(n => n.id === nodeId ? { ...n, data: { ...n.data, ...patch } } : n)
     saveGraph(newNodes, selected.edges)
   }
@@ -156,6 +159,7 @@ export default function Orchestrations({ connection }) {
             {/* Canvas */}
             <div style={{ flex: 1, overflow: 'hidden', display: 'flex' }}>
               <OrchestrationsCanvas
+                ref={canvasRef}
                 key={selected.id}
                 orchId={selected.id}
                 initialNodes={selected.nodes || []}
