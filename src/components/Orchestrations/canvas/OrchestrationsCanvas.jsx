@@ -63,15 +63,20 @@ const CanvasInner = forwardRef(function CanvasInner({
   const [edges, setEdges, onEdgesChange] = useEdgesState([])
   const rfInstance = useReactFlow()
   const saveTimer  = useRef(null)
+  const edgesRef   = useRef([])
   const [cycleErr, setCycleErr] = useState(false)
 
-  // Allows parent to patch a node's data without losing canvas position state
+  useEffect(() => { edgesRef.current = edges }, [edges])
+
+  // Allows parent to patch a node's data and flush any stale pending canvas save
   useImperativeHandle(ref, () => ({
     patchNode: (nodeId, patch) => {
-      clearTimeout(saveTimer.current)
-      setNodes(nds => nds.map(n =>
-        n.id === nodeId ? { ...n, data: { ...n.data, ...patch } } : n
-      ))
+      setNodes(nds => {
+        const updated = nds.map(n => n.id === nodeId ? { ...n, data: { ...n.data, ...patch } } : n)
+        // Replace stale pending debounce with a fresh one using the updated nodes
+        debounced_save(updated, edgesRef.current)
+        return updated
+      })
     },
   }))
 

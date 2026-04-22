@@ -95,6 +95,9 @@ export function useOrchestration(connection) {
 
   async function saveGraph(nodes, edges) {
     if (!selectedId) return
+    // Optimistic: update local state immediately so controlled inputs don't revert
+    // while the PUT request is in flight
+    setOrchs(prev => prev.map(o => o.id === selectedId ? { ...o, nodes, edges } : o))
     setSaving(true)
     try {
       const res = await fetch('/api/orchestrations', {
@@ -104,7 +107,6 @@ export function useOrchestration(connection) {
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
-      setOrchs(prev => prev.map(o => o.id === selectedId ? { ...o, nodes, edges } : o))
     } catch (e) { console.error('Save error:', e.message) }
     setSaving(false)
   }
