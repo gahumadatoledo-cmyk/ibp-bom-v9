@@ -266,11 +266,11 @@ function parseResponse(operation, xml) {
     }
 
     case 'getAgents':
-      return xmlAll(xml, 'return').map(g => ({
+      return xmlAll(xml, 'agentGroups').map(g => ({
         name:        xmlVal(g, 'name'),
         guid:        xmlVal(g, 'guid'),
         description: xmlVal(g, 'description'),
-        agents: xmlAll(g, 'agents').map(a => ({
+        agents: xmlAll(g, 'agent').map(a => ({
           name:          xmlVal(a, 'name'),
           guid:          xmlVal(a, 'guid'),
           description:   xmlVal(a, 'description'),
@@ -281,11 +281,11 @@ function parseResponse(operation, xml) {
       }))
 
     case 'getSystemConfigurations':
-      return xmlAll(xml, 'return').map(s => ({
+      return xmlAll(xml, 'sysConfigurations').map(s => ({
         name:        xmlVal(s, 'name'),
         guid:        xmlVal(s, 'guid'),
         description: xmlVal(s, 'description'),
-        dsConfigurations: xmlAll(s, 'dsConfigurations').map(d => ({
+        dsConfigurations: xmlAll(s, 'dsConfiguration').map(d => ({
           dataStoreName:              xmlVal(d, 'dataStoreName'),
           dataStoreConfigurationName: xmlVal(d, 'dataStoreConfigurationName'),
         })),

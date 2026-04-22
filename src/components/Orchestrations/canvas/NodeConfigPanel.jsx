@@ -196,7 +196,7 @@ export default function NodeConfigPanel({ node, connection, onUpdate, onClose })
                 options={agents.map(a => ({
                   key: a.guid || a.name,
                   value: a.name,
-                  label: a.name + (a.agentStatus && a.agentStatus !== 'CONNECTED' ? ` (${a.agentStatus})` : ''),
+                  label: a.name + (a.agentStatus && !a.agentStatus.includes('CONNECTED') ? ` (${a.agentStatus})` : ''),
                 }))}
                 loading={loadingOptions}
                 emptyLabel="— Sin agente específico —"
