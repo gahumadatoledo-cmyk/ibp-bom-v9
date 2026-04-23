@@ -71,14 +71,13 @@ function toRFEdges(edges, run) {
 
 function CanvasInner({
   orchId, initialNodes, initialEdges, run, isRunning,
-  onSave, onNodeSelect, onAddGroup: addGroupExternal, onRunSingle, ref,
+  onSave, onNodeSelect, onAddGroup: addGroupExternal, onRunSingle, autoConnect, ref,
 }) {
   const [nodes, setNodes, onNodesChange] = useNodesState([])
   const [edges, setEdges, onEdgesChange] = useEdgesState([])
   const rfInstance  = useReactFlow()
   const saveTimer   = useRef(null)
-  const [cycleErr, setCycleErr]       = useState(false)
-  const [autoConnect, setAutoConnect] = useState(false)
+  const [cycleErr, setCycleErr] = useState(false)
   const lastTaskRef = useRef(null)
 
   useImperativeHandle(ref, () => ({
@@ -257,12 +256,8 @@ function CanvasInner({
     setTimeout(() => rfInstance.fitView({ padding: 0.15 }), 50)
   }
 
-  function toggleAutoConnect() {
-    setAutoConnect(v => {
-      if (v) lastTaskRef.current = null
-      return !v
-    })
-  }
+  // Reset last task chain when autoConnect is turned off externally
+  useEffect(() => { if (!autoConnect) lastTaskRef.current = null }, [autoConnect])
 
   const nodeColor = (n) => STATUS_COLORS[n.data?.runStatus || 'pending'] || '#64748b'
 
@@ -295,18 +290,6 @@ function CanvasInner({
 
         <Panel position="top-left" style={{ display: 'flex', gap: 8, margin: 8 }}>
           <button onClick={handleAutoLayout} style={toolbarBtn}>⊞ Auto Layout</button>
-          <button
-            onClick={toggleAutoConnect}
-            style={{
-              ...toolbarBtn,
-              background: autoConnect ? 'rgba(52,211,153,.15)' : 'var(--bg2)',
-              color:      autoConnect ? '#34d399'              : 'var(--text2)',
-              border:     `1px solid ${autoConnect ? 'rgba(52,211,153,.4)' : 'var(--border2)'}`,
-            }}
-            title="Conectar automáticamente cada task al anterior al soltarlo en el canvas"
-          >
-            ⚡ Auto-conectar{autoConnect ? ' ON' : ''}
-          </button>
         </Panel>
 
         {cycleErr && (
@@ -345,10 +328,10 @@ const toolbarBtn = {
 
 // ─── Public wrapper (provides context) ───────────────────────────────────────
 
-function OrchestrationsCanvas({ ref, ...props }) {
+function OrchestrationsCanvas({ ref, autoConnect = false, ...props }) {
   return (
     <ReactFlowProvider>
-      <CanvasInner ref={ref} {...props} />
+      <CanvasInner ref={ref} autoConnect={autoConnect} {...props} />
     </ReactFlowProvider>
   )
 }

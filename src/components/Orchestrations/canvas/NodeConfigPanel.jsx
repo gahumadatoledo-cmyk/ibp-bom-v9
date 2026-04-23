@@ -45,10 +45,10 @@ export default function NodeConfigPanel({ node, connection, onUpdate, onClose })
   if (!node) return null
   const isGroup = node.type === 'orchGroup' || node.type === 'group'
 
-  const [form, setForm]       = useState(() => initForm(node.data))
-  const [dirty, setDirty]     = useState(false)
-  const [saving, setSaving]   = useState(false)
-  const [taskVars, setTaskVars]   = useState([])
+  const [form, setForm]             = useState(() => initForm(node.data))
+  const [dirty, setDirty]           = useState(false)
+  const [saving, setSaving]         = useState(false)
+  const [taskVars, setTaskVars]     = useState([])
   const [loadingVars, setLoadingVars] = useState(false)
 
   useEffect(() => {
@@ -56,14 +56,34 @@ export default function NodeConfigPanel({ node, connection, onUpdate, onClose })
     setDirty(false)
   }, [node.id])
 
+  // Load global variables from SAP — handles both new nodes (taskGuid) and old ones (taskName fallback)
   useEffect(() => {
-    if (isGroup || !node.data.taskGuid || !connection) return
+    if (isGroup || !connection) return
+    const guid = node.data.taskGuid
+    const name = node.data.taskName
+    if (!guid && !name) return
+
+    let cancelled = false
     setLoadingVars(true)
-    soapCall(connection.id, 'getTaskInfo', { taskGuid: node.data.taskGuid })
-      .then(data => setTaskVars(Array.isArray(data?.globalVariables) ? data.globalVariables : []))
-      .catch(() => setTaskVars([]))
-      .finally(() => setLoadingVars(false))
-  }, [node.id, node.data.taskGuid, connection?.id, isGroup])
+    setTaskVars([])
+
+    async function load() {
+      let taskGuid = guid
+      if (!taskGuid && name) {
+        const results = await soapCall(connection.id, 'searchTasks', { nameFilter: name })
+        if (cancelled) return
+        const match = Array.isArray(results) ? results.find(r => r.taskName === name) : null
+        taskGuid = match?.taskGuid
+      }
+      if (!taskGuid || cancelled) return
+      const data = await soapCall(connection.id, 'getTaskInfo', { taskGuid })
+      if (cancelled) return
+      setTaskVars(Array.isArray(data?.globalVariables) ? data.globalVariables : [])
+    }
+
+    load().catch(() => {}).finally(() => { if (!cancelled) setLoadingVars(false) })
+    return () => { cancelled = true }
+  }, [node.id, node.data.taskGuid, node.data.taskName, connection?.id, isGroup])
 
   function patch(field, value) {
     setForm(f => ({ ...f, [field]: value }))
@@ -114,6 +134,12 @@ export default function NodeConfigPanel({ node, connection, onUpdate, onClose })
     onUpdate(node.id, null)
     onClose()
   }
+
+  const varsLabel = loadingVars
+    ? 'Variables globales (cargando…)'
+    : taskVars.length > 0
+      ? `Variables globales (${taskVars.length} disponibles)`
+      : 'Variables globales'
 
   return (
     <div style={{
@@ -185,11 +211,11 @@ export default function NodeConfigPanel({ node, connection, onUpdate, onClose })
               </div>
             )}
 
-            <Field label={loadingVars ? 'Variables globales (cargando…)' : `Variables globales${taskVars.length > 0 ? ` (${taskVars.length} disponibles)` : ''}`}>
+            <Field label={varsLabel}>
               {form.globalVariables.map((v, i) => (
                 <div key={i} style={{ display: 'flex', gap: 4, marginBottom: 4 }}>
                   {loadingVars ? (
-                    <div style={{ ...inputStyle, flex: 1, color: 'var(--text3)' }}>Cargando…</div>
+                    <div style={{ ...inputStyle, flex: 1, color: 'var(--text3)', display: 'flex', alignItems: 'center' }}>Cargando…</div>
                   ) : taskVars.length > 0 ? (
                     <select
                       style={{ ...inputStyle, flex: 1, cursor: 'pointer' }}
