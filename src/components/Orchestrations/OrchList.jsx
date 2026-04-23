@@ -33,7 +33,7 @@ export default function OrchList({ orchs, selectedId, onSelect, onCreate, onDele
         }}
       >
         <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text2)', writingMode: 'vertical-rl', letterSpacing: '0.1em', transform: 'rotate(180deg)', textTransform: 'uppercase' }}>
-          Orch
+          Orquestaciones
         </span>
         <span style={{ fontSize: 24, color: 'var(--text2)' }}>›</span>
       </div>

@@ -9,7 +9,7 @@ const TABS = [
   { id: 'resumen',        label: 'Resumen'          },
   { id: 'tasks',          label: 'Projects & Tasks'  },
   { id: 'monitor',        label: 'Task Monitor'      },
-  { id: 'orchestrations', label: 'Orchestrations'    },
+  { id: 'orchestrations', label: 'Orquestaciones'    },
 ]
 
 export default function SystemView({ connection }) {
