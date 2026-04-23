@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import OrchList              from './OrchList'
 import TaskPalette           from './panel/TaskPalette'
 import OrchestrationsCanvas  from './canvas/OrchestrationsCanvas'
@@ -46,6 +46,14 @@ export default function Orchestrations({ connection }) {
   const [fullscreen, setFullscreen]               = useState(false)
   const addGroupRef = useRef(() => {})
   const canvasRef   = useRef(null)
+
+  // Global Escape key to exit fullscreen
+  useEffect(() => {
+    if (!fullscreen) return
+    const handler = (e) => { if (e.key === 'Escape') setFullscreen(false) }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [fullscreen])
 
   function handleRunSingle(nodeId) {
     const node = selected?.nodes?.find(n => n.id === nodeId)
@@ -294,12 +302,9 @@ export default function Orchestrations({ connection }) {
       ) : fullscreen ? (
         /* ── Fullscreen overlay ─────────────────────────────────────────────── */
         <div style={{
-          position: 'fixed', inset: 0, zIndex: 100,
+          position: 'fixed', inset: 0, zIndex: 500,
           display: 'flex', background: 'var(--bg)', overflow: 'hidden',
-        }}
-          onKeyDown={e => { if (e.key === 'Escape') setFullscreen(false) }}
-          tabIndex={-1}
-        >
+        }}>
           {canvasSection}
         </div>
       ) : (
