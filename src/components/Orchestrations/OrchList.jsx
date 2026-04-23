@@ -1,6 +1,6 @@
 import { useState } from 'react'
 
-export default function OrchList({ orchs, selectedId, onSelect, onCreate, onDelete, connectionId }) {
+export default function OrchList({ orchs, selectedId, onSelect, onCreate, onDelete, connectionId, collapsed = false, onToggle }) {
   const FAVS_KEY = `ibp-favs-${connectionId}`
   const [favs, setFavs] = useState(() => {
     try { return new Set(JSON.parse(localStorage.getItem(FAVS_KEY) || '[]')) } catch { return new Set() }
@@ -20,6 +20,26 @@ export default function OrchList({ orchs, selectedId, onSelect, onCreate, onDele
     return af - bf
   })
 
+  if (collapsed) {
+    return (
+      <div
+        onClick={onToggle}
+        title="Expandir panel de orquestaciones"
+        style={{
+          width: 28, flexShrink: 0, borderRight: '1px solid var(--border)',
+          display: 'flex', flexDirection: 'column', alignItems: 'center',
+          background: 'var(--bg2)', cursor: 'pointer', userSelect: 'none',
+          paddingTop: 12, gap: 8,
+        }}
+      >
+        <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text2)', writingMode: 'vertical-rl', letterSpacing: '0.1em', transform: 'rotate(180deg)', textTransform: 'uppercase' }}>
+          Orch
+        </span>
+        <span style={{ fontSize: 24, color: 'var(--text2)' }}>›</span>
+      </div>
+    )
+  }
+
   return (
     <div style={{
       width: 220, flexShrink: 0, borderRight: '1px solid var(--border)',
@@ -32,10 +52,16 @@ export default function OrchList({ orchs, selectedId, onSelect, onCreate, onDele
         <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text2)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
           Orquestaciones
         </span>
-        <button onClick={onCreate} title="Nueva orquestación" style={{
-          background: 'none', border: 'none', color: 'var(--accent)',
-          fontSize: 20, cursor: 'pointer', lineHeight: 1, padding: 0,
-        }}>+</button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <button onClick={onCreate} title="Nueva orquestación" style={{
+            background: 'none', border: 'none', color: 'var(--accent)',
+            fontSize: 20, cursor: 'pointer', lineHeight: 1, padding: 0,
+          }}>+</button>
+          <button onClick={onToggle} title="Contraer panel" style={{
+            background: 'none', border: 'none', color: 'var(--text2)',
+            fontSize: 20, cursor: 'pointer', lineHeight: 1, padding: '0 2px',
+          }}>‹</button>
+        </div>
       </div>
 
       <div style={{ flex: 1, overflowY: 'auto' }}>

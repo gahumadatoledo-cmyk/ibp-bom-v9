@@ -39,7 +39,8 @@ export default function Orchestrations({ connection }) {
   const [showLogModal, setShowLogModal]       = useState(false)
   const [lastRunParams, setLastRunParams]     = useState(null)
   const [runSingleNode, setRunSingleNode]     = useState(null)
-  const [paletteCollapsed, setPaletteCollapsed] = useState(false)
+  const [paletteCollapsed, setPaletteCollapsed]   = useState(false)
+  const [orchListCollapsed, setOrchListCollapsed] = useState(false)
   const addGroupRef = useRef(() => {})
   const canvasRef   = useRef(null)
 
@@ -83,6 +84,8 @@ export default function Orchestrations({ connection }) {
         onCreate={createOrch}
         onDelete={deleteOrch}
         connectionId={connection.id}
+        collapsed={orchListCollapsed}
+        onToggle={() => setOrchListCollapsed(v => !v)}
       />
 
       {!selected ? (

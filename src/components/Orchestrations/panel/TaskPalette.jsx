@@ -121,10 +121,10 @@ export default function TaskPalette({ connection, onAddGroup, collapsed = false,
           paddingTop: 12, gap: 8,
         }}
       >
-        <span style={{ fontSize: 10, color: 'var(--text3)', writingMode: 'vertical-rl', letterSpacing: '0.1em', transform: 'rotate(180deg)' }}>
+        <span style={{ fontSize: 24, color: 'var(--text3)', writingMode: 'vertical-rl', letterSpacing: '0.1em', transform: 'rotate(180deg)' }}>
           TASKS
         </span>
-        <span style={{ fontSize: 24, color: 'var(--text3)' }}>›</span>
+        <span style={{ fontSize: 24, color: 'var(--text2)' }}>›</span>
       </div>
     )
   }
@@ -156,7 +156,7 @@ export default function TaskPalette({ connection, onAddGroup, collapsed = false,
           <button
             onClick={onToggle}
             title="Contraer panel"
-            style={{ background: 'none', border: 'none', color: 'var(--text3)', cursor: 'pointer', fontSize: 12, lineHeight: 1, padding: '0 2px' }}
+            style={{ background: 'none', border: 'none', color: 'var(--text2)', cursor: 'pointer', fontSize: 20, lineHeight: 1, padding: '0 4px' }}
           >‹</button>
         </div>
         <input
@@ -199,7 +199,7 @@ export default function TaskPalette({ connection, onAddGroup, collapsed = false,
                 onMouseEnter={e => { if (!isExp) e.currentTarget.style.background = 'var(--bg3)' }}
                 onMouseLeave={e => { if (!isExp) e.currentTarget.style.background = 'transparent' }}
               >
-                <span style={{ color: 'var(--text3)', fontSize: 24, width: 12, textAlign: 'center', flexShrink: 0 }}>
+                <span style={{ color: 'var(--text2)', fontSize: 16, width: 16, textAlign: 'center', flexShrink: 0 }}>
                   {isLoadingT ? '…' : isExp ? '▾' : '▸'}
                 </span>
                 <span style={{
