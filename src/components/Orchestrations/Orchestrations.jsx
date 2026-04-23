@@ -41,6 +41,7 @@ export default function Orchestrations({ connection }) {
   const [runSingleNode, setRunSingleNode]     = useState(null)
   const [paletteCollapsed, setPaletteCollapsed]   = useState(false)
   const [orchListCollapsed, setOrchListCollapsed] = useState(false)
+  const [orphanWarning, setOrphanWarning]         = useState(null)
   const addGroupRef = useRef(() => {})
   const canvasRef   = useRef(null)
 
@@ -50,6 +51,20 @@ export default function Orchestrations({ connection }) {
   }
 
   const selectedNode = selected?.nodes?.find(n => n.id === selectedNodeId) || null
+
+  function checkBeforeRun() {
+    const nodes = selected?.nodes || []
+    const hasGroups = nodes.some(n => !n.parentId && n.type === 'group')
+    if (!hasGroups) return true
+    const orphans = nodes.filter(n => !n.parentId && n.type === 'task')
+    if (orphans.length > 0) {
+      const names = orphans.map(n => n.data?.label || n.data?.taskName || 'Task').join(', ')
+      setOrphanWarning(`Tasks fuera de grupo: ${names}`)
+      setTimeout(() => setOrphanWarning(null), 6000)
+      return false
+    }
+    return true
+  }
 
   function handleNodeUpdate(nodeId, patch) {
     if (!selected) return
@@ -174,7 +189,7 @@ export default function Orchestrations({ connection }) {
                 </button>
               )}
               <button
-                onClick={() => setShowRunModal(true)}
+                onClick={() => { if (checkBeforeRun()) setShowRunModal(true) }}
                 disabled={isRunning || !hasNodes || starting}
                 style={actionBtn('#34d399', isRunning || !hasNodes || starting)}
               >
@@ -191,6 +206,20 @@ export default function Orchestrations({ connection }) {
                 </button>
               )}
             </div>
+
+            {/* Orphan tasks warning */}
+            {orphanWarning && (
+              <div style={{
+                padding: '7px 14px', background: 'rgba(251,191,36,.1)',
+                borderBottom: '1px solid rgba(251,191,36,.3)',
+                display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0,
+              }}>
+                <span style={{ fontSize: 11, color: '#fbbf24' }}>
+                  ⚠ Los siguientes tasks deben estar dentro de un grupo para poder iniciar: <strong>{orphanWarning}</strong>
+                </span>
+                <button onClick={() => setOrphanWarning(null)} style={{ marginLeft: 'auto', background: 'none', border: 'none', color: '#fbbf24', cursor: 'pointer', fontSize: 14, lineHeight: 1 }}>×</button>
+              </div>
+            )}
 
             {/* Canvas */}
             <div style={{ flex: 1, overflow: 'hidden', display: 'flex' }}>

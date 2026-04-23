@@ -31,33 +31,9 @@ function Field({ label, children }) {
   )
 }
 
-function DropdownOrText({ value, options, loading, emptyLabel, placeholder, onChange }) {
-  if (loading) return <div style={{ ...inputStyle, color: 'var(--text3)' }}>Cargando…</div>
-  if (options.length > 0) {
-    return (
-      <select style={{ ...inputStyle, cursor: 'pointer' }} value={value || ''} onChange={e => onChange(e.target.value || null)}>
-        <option value="">{emptyLabel}</option>
-        {options.map(o => (
-          <option key={o.key} value={o.value}>{o.label}</option>
-        ))}
-      </select>
-    )
-  }
-  return (
-    <input
-      style={inputStyle}
-      value={value || ''}
-      onChange={e => onChange(e.target.value || null)}
-      placeholder={placeholder}
-    />
-  )
-}
-
 function initForm(data) {
   return {
     label:           data.label         || '',
-    agentName:       data.agentName     || '',
-    profileName:     data.profileName   || '',
     errorStrategy:   data.errorStrategy || 'stop',
     maxRetries:      data.maxRetries    ?? 1,
     retryDelaySec:   data.retryDelaySec ?? 30,
@@ -69,54 +45,54 @@ export default function NodeConfigPanel({ node, connection, onUpdate, onClose })
   if (!node) return null
   const isGroup = node.type === 'orchGroup' || node.type === 'group'
 
-  const [form, setForm]   = useState(() => initForm(node.data))
-  const [dirty, setDirty] = useState(false)
-  const [saving, setSaving] = useState(false)
+  const [form, setForm]       = useState(() => initForm(node.data))
+  const [dirty, setDirty]     = useState(false)
+  const [saving, setSaving]   = useState(false)
+  const [taskVars, setTaskVars]   = useState([])
+  const [loadingVars, setLoadingVars] = useState(false)
 
-  const [agents,  setAgents]  = useState([])
-  const [configs, setConfigs] = useState([])
-  const [loadingOptions, setLoadingOptions] = useState(false)
-
-  // Re-initialize form when switching to a different node
   useEffect(() => {
     setForm(initForm(node.data))
     setDirty(false)
   }, [node.id])
 
   useEffect(() => {
-    if (isGroup || !connection) return
-    setLoadingOptions(true)
-    Promise.all([
-      soapCall(connection.id, 'getAgents', { activeOnly: false }),
-      soapCall(connection.id, 'getSystemConfigurations'),
-    ])
-      .then(([agentGroups, profs]) => {
-        const flat = (Array.isArray(agentGroups) ? agentGroups : [])
-          .flatMap(g => Array.isArray(g.agents) ? g.agents : [])
-        setAgents(flat)
-        setConfigs(Array.isArray(profs) ? profs : [])
-      })
-      .catch(() => {})
-      .finally(() => setLoadingOptions(false))
-  }, [node.id, connection?.id, isGroup])
+    if (isGroup || !node.data.taskGuid || !connection) return
+    setLoadingVars(true)
+    soapCall(connection.id, 'getTaskInfo', { taskGuid: node.data.taskGuid })
+      .then(data => setTaskVars(Array.isArray(data?.globalVariables) ? data.globalVariables : []))
+      .catch(() => setTaskVars([]))
+      .finally(() => setLoadingVars(false))
+  }, [node.id, node.data.taskGuid, connection?.id, isGroup])
 
   function patch(field, value) {
     setForm(f => ({ ...f, [field]: value }))
     setDirty(true)
   }
+
   function addVar() {
     setForm(f => ({ ...f, globalVariables: [...f.globalVariables, { name: '', value: '' }] }))
     setDirty(true)
   }
+
   function removeVar(i) {
     setForm(f => ({ ...f, globalVariables: f.globalVariables.filter((_, j) => j !== i) }))
     setDirty(true)
   }
+
   function patchVar(i, field, value) {
-    setForm(f => ({
-      ...f,
-      globalVariables: f.globalVariables.map((v, j) => j === i ? { ...v, [field]: value } : v),
-    }))
+    setForm(f => {
+      const updated = f.globalVariables.map((v, j) => {
+        if (j !== i) return v
+        const next = { ...v, [field]: value }
+        if (field === 'name' && !v.value) {
+          const tv = taskVars.find(t => t.name === value)
+          if (tv?.defaultValue) next.value = tv.defaultValue
+        }
+        return next
+      })
+      return { ...f, globalVariables: updated }
+    })
     setDirty(true)
   }
 
@@ -124,8 +100,6 @@ export default function NodeConfigPanel({ node, connection, onUpdate, onClose })
     setSaving(true)
     const update = {
       label:           form.label || node.data.taskName || 'Sin nombre',
-      agentName:       form.agentName  || null,
-      profileName:     form.profileName || null,
       errorStrategy:   form.errorStrategy,
       maxRetries:      Number(form.maxRetries),
       retryDelaySec:   Number(form.retryDelaySec),
@@ -173,43 +147,17 @@ export default function NodeConfigPanel({ node, connection, onUpdate, onClose })
           />
         </Field>
 
-        {/* Grupo: info de ejecución */}
+        {/* Group info */}
         {isGroup && (
           <div style={{ marginBottom: 12, padding: '8px 10px', borderRadius: 6, background: 'var(--bg3)', border: '1px solid var(--border)', fontSize: 10, color: 'var(--text3)', lineHeight: 1.5 }}>
-            El orden de ejecución dentro del grupo lo determinan los edges entre sus tasks.<br />
-            Sin edges → paralelo · Con edges → en secuencia
+            El orden lo determinan los edges entre sus tasks.<br />
+            Sin edges → paralelo · Todos conectados → en secuencia · Mix → híbrido
           </div>
         )}
 
-        {/* Task: agente, perfil, estrategia */}
+        {/* Task config */}
         {!isGroup && (
           <>
-            <Field label="Agente">
-              <DropdownOrText
-                value={form.agentName}
-                options={agents.map(a => ({
-                  key: a.guid || a.name,
-                  value: a.name,
-                  label: a.name + (a.agentStatus && !a.agentStatus.includes('CONNECTED') ? ` (${a.agentStatus})` : ''),
-                }))}
-                loading={loadingOptions}
-                emptyLabel="— Sin agente específico —"
-                placeholder="Nombre del agente"
-                onChange={v => patch('agentName', v || '')}
-              />
-            </Field>
-
-            <Field label="Configuración de sistema">
-              <DropdownOrText
-                value={form.profileName}
-                options={configs.map(c => ({ key: c.guid || c.name, value: c.name, label: c.name }))}
-                loading={loadingOptions}
-                emptyLabel="— Sin configuración específica —"
-                placeholder="Nombre de la configuración"
-                onChange={v => patch('profileName', v || '')}
-              />
-            </Field>
-
             <Field label="En caso de error">
               <select style={{ ...inputStyle, cursor: 'pointer' }}
                 value={form.errorStrategy}
@@ -237,15 +185,35 @@ export default function NodeConfigPanel({ node, connection, onUpdate, onClose })
               </div>
             )}
 
-            <Field label="Variables globales">
+            <Field label={loadingVars ? 'Variables globales (cargando…)' : `Variables globales${taskVars.length > 0 ? ` (${taskVars.length} disponibles)` : ''}`}>
               {form.globalVariables.map((v, i) => (
                 <div key={i} style={{ display: 'flex', gap: 4, marginBottom: 4 }}>
-                  <input
-                    style={{ ...inputStyle, flex: 1 }}
-                    value={v.name}
-                    onChange={e => patchVar(i, 'name', e.target.value)}
-                    placeholder="nombre"
-                  />
+                  {loadingVars ? (
+                    <div style={{ ...inputStyle, flex: 1, color: 'var(--text3)' }}>Cargando…</div>
+                  ) : taskVars.length > 0 ? (
+                    <select
+                      style={{ ...inputStyle, flex: 1, cursor: 'pointer' }}
+                      value={v.name}
+                      onChange={e => patchVar(i, 'name', e.target.value)}
+                    >
+                      <option value="">— Seleccionar —</option>
+                      {v.name && !taskVars.some(tv => tv.name === v.name) && (
+                        <option value={v.name}>{v.name}</option>
+                      )}
+                      {taskVars.map(tv => (
+                        <option key={tv.name} value={tv.name}>
+                          {tv.name}{tv.description ? ` — ${tv.description}` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      style={{ ...inputStyle, flex: 1 }}
+                      value={v.name}
+                      onChange={e => patchVar(i, 'name', e.target.value)}
+                      placeholder="nombre"
+                    />
+                  )}
                   <input
                     style={{ ...inputStyle, flex: 1 }}
                     value={v.value}

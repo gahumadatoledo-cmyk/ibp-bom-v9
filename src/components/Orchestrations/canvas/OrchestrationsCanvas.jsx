@@ -17,31 +17,44 @@ const EDGE_DEFAULTS = {
   animated: false,
 }
 
+// Determines if a group's children form a parallel, serial, or hybrid execution
+function computeGroupMode(groupId, allNodes, allEdges) {
+  const children = allNodes.filter(n => n.parentId === groupId)
+  if (children.length === 0) return 'parallel'
+  const internalEdges = allEdges.filter(e =>
+    children.some(c => c.id === e.source) && children.some(c => c.id === e.target)
+  )
+  if (internalEdges.length === 0) return 'parallel'
+  const connectedIds = new Set([
+    ...internalEdges.map(e => e.source),
+    ...internalEdges.map(e => e.target),
+  ])
+  return children.every(c => connectedIds.has(c.id)) ? 'serial' : 'hybrid'
+}
+
 function toRFNodes(nodes, run, onSelect, onRunSingle, edges = []) {
   return nodes.map(n => {
     const rfType = n.type === 'task' ? 'orchTask' : n.type === 'group' ? 'orchGroup' : n.type
     const ns = run?.nodes?.[n.id]
     const runStatus = ns?.status || 'pending'
     let childSummary = null
-    if ((rfType === 'orchGroup') && ns?.children) {
+    if (rfType === 'orchGroup' && ns?.children) {
       const vals = Object.values(ns.children)
       if (vals.length) {
         const done = vals.filter(c => !['pending', 'running'].includes(c.status)).length
         childSummary = `${done}/${vals.length} completadas`
       }
     }
-    const hasInternalEdges = rfType === 'orchGroup'
-      ? edges.some(e => nodes.some(c => c.id === e.source && c.parentId === n.id))
-      : false
+    const groupMode = rfType === 'orchGroup' ? computeGroupMode(n.id, nodes, edges) : null
     return {
       ...n,
       type: rfType,
-      data: { ...n.data, runStatus, sapRunId: ns?.sapRunId || null, childSummary, onSelect, onRunSingle: rfType === 'orchTask' ? onRunSingle : undefined, hasInternalEdges },
+      data: { ...n.data, runStatus, sapRunId: ns?.sapRunId || null, childSummary, onSelect, onRunSingle: rfType === 'orchTask' ? onRunSingle : undefined, groupMode },
     }
   })
 }
 
-function toRFEdges(edges, run, nodes) {
+function toRFEdges(edges, run) {
   return edges.map(e => {
     const targetNs = run?.nodes?.[e.target]
     const sourceNs = run?.nodes?.[e.source]
@@ -55,7 +68,6 @@ function toRFEdges(edges, run, nodes) {
 }
 
 // ─── Inner canvas (must be inside ReactFlowProvider) ─────────────────────────
-// React 19: ref is a plain prop — no forwardRef needed
 
 function CanvasInner({
   orchId, initialNodes, initialEdges, run, isRunning,
@@ -63,12 +75,12 @@ function CanvasInner({
 }) {
   const [nodes, setNodes, onNodesChange] = useNodesState([])
   const [edges, setEdges, onEdgesChange] = useEdgesState([])
-  const rfInstance = useReactFlow()
-  const saveTimer  = useRef(null)
-  const [cycleErr, setCycleErr]     = useState(false)
+  const rfInstance  = useReactFlow()
+  const saveTimer   = useRef(null)
+  const [cycleErr, setCycleErr]       = useState(false)
+  const [autoConnect, setAutoConnect] = useState(false)
+  const lastTaskRef = useRef(null)
 
-  // Exposes imperative helpers so the parent can sync canvas state without going
-  // through the debounced save path (which could overwrite panel changes).
   useImperativeHandle(ref, () => ({
     patchNodeData: (nodeId, patch) => {
       clearTimeout(saveTimer.current)
@@ -84,8 +96,9 @@ function CanvasInner({
   // Re-init when orchestration changes
   useEffect(() => {
     setNodes(toRFNodes(initialNodes, run, handleNodeSelect, onRunSingle, initialEdges))
-    setEdges(toRFEdges(initialEdges, run, initialNodes))
+    setEdges(toRFEdges(initialEdges, run))
     setCycleErr(false)
+    lastTaskRef.current = null
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orchId])
 
@@ -93,17 +106,17 @@ function CanvasInner({
   useEffect(() => {
     if (!run) return
     setNodes(nds => toRFNodes(nds, run, handleNodeSelect, onRunSingle, edges))
-    setEdges(eds => toRFEdges(eds, run, nodes))
+    setEdges(eds => toRFEdges(eds, run))
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [run])
 
-  // Recompute hasInternalEdges for group nodes whenever edges change
+  // Recompute groupMode whenever edges change
   useEffect(() => {
     setNodes(nds => nds.map(n => {
       if (n.type !== 'orchGroup') return n
-      const has = edges.some(e => nds.some(c => c.id === e.source && c.parentId === n.id))
-      if (n.data.hasInternalEdges === has) return n
-      return { ...n, data: { ...n.data, hasInternalEdges: has } }
+      const mode = computeGroupMode(n.id, nds, edges)
+      if (n.data.groupMode === mode) return n
+      return { ...n, data: { ...n.data, groupMode: mode } }
     }))
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [edges])
@@ -120,7 +133,7 @@ function CanvasInner({
         ...(parentId ? { parentId, extent } : {}),
         ...(style ? { style } : {}),
         data: {
-          taskName: data.taskName, label: data.label,
+          taskName: data.taskName, taskGuid: data.taskGuid, label: data.label,
           agentName: data.agentName, profileName: data.profileName,
           errorStrategy: data.errorStrategy, maxRetries: data.maxRetries,
           retryDelaySec: data.retryDelaySec,
@@ -135,8 +148,6 @@ function CanvasInner({
 
   function handleNodesChange(changes) {
     onNodesChange(changes)
-    // 'select' changes don't modify data or position — skip them to avoid
-    // queuing a debounced save with stale canvas data after the user clicks a node
     if (changes.some(c => c.type !== 'select')) {
       setNodes(nds => { debounced_save(nds, edges); return nds })
     }
@@ -159,7 +170,6 @@ function CanvasInner({
     if (connection.source === connection.target) return false
     const src = nodes.find(n => n.id === connection.source)
     const tgt = nodes.find(n => n.id === connection.target)
-    // Only allow same-level connections: both top-level or both in the same group
     return (src?.parentId || null) === (tgt?.parentId || null)
   }, [nodes])
 
@@ -176,7 +186,6 @@ function CanvasInner({
     const { taskName, taskGuid, type } = JSON.parse(raw)
     const position = rfInstance.screenToFlowPosition({ x: e.clientX, y: e.clientY })
 
-    // Check if dropped inside a group node (use measured n.width/n.height first, fall back to style)
     const groupNode = nodes.find(n => {
       if (n.type !== 'orchGroup' || n.parentId) return false
       const w = n.width  || n.style?.width  || 300
@@ -193,7 +202,7 @@ function CanvasInner({
         : position,
       ...(groupNode ? { parentId: groupNode.id, extent: 'parent' } : {}),
       data: {
-        taskName, label: taskName, agentName: null, profileName: null,
+        taskName, taskGuid, label: taskName, agentName: null, profileName: null,
         errorStrategy: 'stop', maxRetries: 0, retryDelaySec: 30,
         globalVariables: [], children: [],
         runStatus: 'pending', onSelect: handleNodeSelect,
@@ -201,9 +210,22 @@ function CanvasInner({
     }
 
     const newNodes = [...nodes, newNode]
+    let newEdges = edges
+
+    // Auto-connect: link new top-level task to the last one added
+    if (autoConnect && !groupNode && lastTaskRef.current) {
+      const prevExists = nodes.some(n => n.id === lastTaskRef.current && n.type === 'orchTask' && !n.parentId)
+      if (prevExists) {
+        const autoEdge = { id: crypto.randomUUID(), source: lastTaskRef.current, target: newId, ...EDGE_DEFAULTS }
+        newEdges = addEdge(autoEdge, edges)
+      }
+    }
+    if (!groupNode) lastTaskRef.current = newId
+
     setNodes(newNodes)
-    debounced_save(newNodes, edges)
-  }, [nodes, edges, rfInstance])
+    if (newEdges !== edges) setEdges(newEdges)
+    debounced_save(newNodes, newEdges)
+  }, [nodes, edges, rfInstance, autoConnect])
 
   // ── Add group ────────────────────────────────────────────────────────────
   function addGroup() {
@@ -224,7 +246,6 @@ function CanvasInner({
     setNodes(newNodes)
     debounced_save(newNodes, edges)
   }
-  // expose to parent via prop
   useEffect(() => { addGroupExternal.current = addGroup }, [nodes, edges])
 
   // ── Auto layout ──────────────────────────────────────────────────────────
@@ -234,6 +255,13 @@ function CanvasInner({
     setNodes(updated)
     debounced_save(updated, edges)
     setTimeout(() => rfInstance.fitView({ padding: 0.15 }), 50)
+  }
+
+  function toggleAutoConnect() {
+    setAutoConnect(v => {
+      if (v) lastTaskRef.current = null
+      return !v
+    })
   }
 
   const nodeColor = (n) => STATUS_COLORS[n.data?.runStatus || 'pending'] || '#64748b'
@@ -267,6 +295,18 @@ function CanvasInner({
 
         <Panel position="top-left" style={{ display: 'flex', gap: 8, margin: 8 }}>
           <button onClick={handleAutoLayout} style={toolbarBtn}>⊞ Auto Layout</button>
+          <button
+            onClick={toggleAutoConnect}
+            style={{
+              ...toolbarBtn,
+              background: autoConnect ? 'rgba(52,211,153,.15)' : 'var(--bg2)',
+              color:      autoConnect ? '#34d399'              : 'var(--text2)',
+              border:     `1px solid ${autoConnect ? 'rgba(52,211,153,.4)' : 'var(--border2)'}`,
+            }}
+            title="Conectar automáticamente cada task al anterior al soltarlo en el canvas"
+          >
+            ⚡ Auto-conectar{autoConnect ? ' ON' : ''}
+          </button>
         </Panel>
 
         {cycleErr && (
