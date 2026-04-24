@@ -157,6 +157,26 @@ function CanvasInner({
     setEdges(eds => { debounced_save(nodes, eds); return eds })
   }
 
+  function handleNodesDelete(deletedNodes) {
+    if (!deletedNodes?.length) return
+    const toDelete = new Set(deletedNodes.map(n => n.id))
+    let changed = true
+    while (changed) {
+      changed = false
+      for (const n of nodes) {
+        if (n.parentId && toDelete.has(n.parentId) && !toDelete.has(n.id)) {
+          toDelete.add(n.id)
+          changed = true
+        }
+      }
+    }
+    const nextNodes = nodes.filter(n => !toDelete.has(n.id))
+    const nextEdges = edges.filter(e => !toDelete.has(e.source) && !toDelete.has(e.target))
+    setNodes(nextNodes)
+    setEdges(nextEdges)
+    debounced_save(nextNodes, nextEdges)
+  }
+
   const onConnect = useCallback((params) => {
     const newEdge = { ...params, id: crypto.randomUUID(), ...EDGE_DEFAULTS }
     const newEdges = addEdge(newEdge, edges)
@@ -270,6 +290,7 @@ function CanvasInner({
         nodes={nodes}
         edges={edges}
         onNodesChange={handleNodesChange}
+        onNodesDelete={handleNodesDelete}
         onEdgesChange={handleEdgesChange}
         onConnect={onConnect}
         isValidConnection={isValidConnection}

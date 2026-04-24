@@ -38,6 +38,43 @@ async function redisSetObj(key, value, exSeconds = 172800) {
   if (!resp.ok) throw new Error(`Redis set failed: ${resp.status}`)
 }
 
+async function redisSetNx(key, value, exSeconds) {
+  const resp = await fetch(`${REDIS_URL}/pipeline`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${REDIS_TOKEN}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify([['SET', key, value, 'NX', 'EX', exSeconds]]),
+  })
+  if (!resp.ok) throw new Error(`Redis set NX failed: ${resp.status}`)
+  const data = await resp.json()
+  return data[0]?.result === 'OK'
+}
+
+async function redisDel(key) {
+  const resp = await fetch(`${REDIS_URL}/pipeline`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${REDIS_TOKEN}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify([['DEL', key]]),
+  })
+  if (!resp.ok) throw new Error(`Redis del failed: ${resp.status}`)
+}
+
+async function withRunLock(orchestrationId, fn) {
+  const lockKey = `cids:orch_run_lock:${orchestrationId}`
+  const lockToken = crypto.randomUUID()
+  const acquired = await redisSetNx(lockKey, lockToken, 15)
+  if (!acquired) return null
+  try {
+    return await fn()
+  } finally {
+    try {
+      const current = await redisGetObj(lockKey)
+      if (current === lockToken) await redisDel(lockKey)
+    } catch {
+      // lock expires automatically (EX), swallow cleanup errors
+    }
+  }
+}
+
 // ─── SOAP proxy ───────────────────────────────────────────────────────────────
 
 async function soapRequest(connectionId, operation, params) {
@@ -311,130 +348,141 @@ async function pollGroupNode(run, nodeId, nodeDef, allNodes, allEdges) {
 // ─── Start run ────────────────────────────────────────────────────────────────
 
 async function startRun(orchestrationId, defaultAgent = null, defaultProfile = null) {
-  const orch = await getOrchestration(orchestrationId)
-  if (!orch) throw new Error('Orquestación no encontrada')
+  return withRunLock(orchestrationId, async () => {
+    const orch = await getOrchestration(orchestrationId)
+    if (!orch) throw new Error('Orquestación no encontrada')
 
-  const { nodes, edges } = resolveGraph(orch)
-  if (nodes.filter(n => !n.parentId).length === 0) throw new Error('La orquestación no tiene nodos')
+    const { nodes, edges } = resolveGraph(orch)
+    if (nodes.filter(n => !n.parentId).length === 0) throw new Error('La orquestación no tiene nodos')
 
-  const RUN_KEY = `cids:orch_run:${orchestrationId}`
-  const existing = await redisGetObj(RUN_KEY)
-  if (existing?.status === 'running') {
-    const err = new Error('Ya hay una ejecución activa'); err.statusCode = 409; throw err
-  }
+    const RUN_KEY = `cids:orch_run:${orchestrationId}`
+    const existing = await redisGetObj(RUN_KEY)
+    if (existing?.status === 'running') {
+      const err = new Error('Ya hay una ejecución activa'); err.statusCode = 409; throw err
+    }
 
-  const waves = buildWaves(nodes.filter(n => !n.parentId), edges)
-  if (waves.length === 0) throw new Error('No se pudo determinar el orden de ejecución (¿ciclo detectado?)')
+    const waves = buildWaves(nodes.filter(n => !n.parentId), edges)
+    if (waves.length === 0) throw new Error('No se pudo determinar el orden de ejecución (¿ciclo detectado?)')
 
-  let run = {
-    runId: crypto.randomUUID(),
-    orchestrationId, connectionId: orch.connectionId,
-    status: 'running', currentWave: 0,
-    startedAt: new Date().toISOString(), finishedAt: null,
-    defaultAgent: defaultAgent || null, defaultProfile: defaultProfile || null,
-    waves,
-    nodes: Object.fromEntries(nodes.map(n => [n.id, initNodeState(n, nodes)])),
-  }
+    let run = {
+      runId: crypto.randomUUID(),
+      orchestrationId, connectionId: orch.connectionId,
+      status: 'running', currentWave: 0,
+      startedAt: new Date().toISOString(), finishedAt: null,
+      defaultAgent: defaultAgent || null, defaultProfile: defaultProfile || null,
+      waves,
+      nodes: Object.fromEntries(nodes.map(n => [n.id, initNodeState(n, nodes)])),
+    }
 
-  run = await executeWave(run, 0, nodes, edges)
-  await redisSetObj(RUN_KEY, run)
-  return run
+    run = await executeWave(run, 0, nodes, edges)
+    await redisSetObj(RUN_KEY, run)
+    return run
+  })
 }
 
 // ─── Tick ─────────────────────────────────────────────────────────────────────
 
 async function tick(orchestrationId) {
-  const RUN_KEY = `cids:orch_run:${orchestrationId}`
-  let run = await redisGetObj(RUN_KEY)
-  if (!run || TERMINAL_RUN.has(run.status)) return run
+  const locked = await withRunLock(orchestrationId, async () => {
+    const RUN_KEY = `cids:orch_run:${orchestrationId}`
+    let run = await redisGetObj(RUN_KEY)
+    if (!run || TERMINAL_RUN.has(run.status)) return run
 
-  const orch = await getOrchestration(orchestrationId)
-  if (!orch) {
-    run.status = 'error'; run.finishedAt = new Date().toISOString()
-    await redisSetObj(RUN_KEY, run); return run
-  }
-
-  const { nodes, edges } = resolveGraph(orch)
-  const waveNodeIds = run.waves[run.currentWave] || []
-
-  // Poll all nodes in current wave
-  await Promise.allSettled(waveNodeIds.map(async nodeId => {
-    const nodeDef = nodes.find(n => n.id === nodeId)
-    if (!nodeDef) return
-    if (nodeDef.type === 'task')  await pollTaskNode(run, nodeId, nodeDef)
-    if (nodeDef.type === 'group') await pollGroupNode(run, nodeId, nodeDef, nodes, edges)
-  }))
-
-  // Check if wave is complete
-  const waveComplete = waveNodeIds.every(id => DONE_NODE.has(run.nodes[id]?.status))
-  if (!waveComplete) { await redisSetObj(RUN_KEY, run); return run }
-
-  // Check for blocking errors (errorStrategy === 'stop')
-  const hasBlockingError = waveNodeIds.some(id => {
-    if (run.nodes[id]?.status !== 'error') return false
-    const nodeDef = nodes.find(n => n.id === id)
-    return (nodeDef?.data?.errorStrategy || 'stop') === 'stop'
-  })
-
-  if (hasBlockingError) {
-    run.status = 'error'; run.finishedAt = new Date().toISOString()
-    for (const futureWave of run.waves.slice(run.currentWave + 1)) {
-      for (const nid of futureWave) if (run.nodes[nid]) run.nodes[nid].status = 'skipped'
+    const orch = await getOrchestration(orchestrationId)
+    if (!orch) {
+      run.status = 'error'; run.finishedAt = new Date().toISOString()
+      await redisSetObj(RUN_KEY, run); return run
     }
-  } else if (run.currentWave < run.waves.length - 1) {
-    run.currentWave++
-    run = await executeWave(run, run.currentWave, nodes, edges)
-  } else {
-    const anyErr = Object.values(run.nodes).some(ns => ns.status === 'error')
-    run.status = anyErr ? 'error' : 'success'
-    run.finishedAt = new Date().toISOString()
-  }
 
-  await redisSetObj(RUN_KEY, run)
-  return run
+    const { nodes, edges } = resolveGraph(orch)
+    const waveNodeIds = run.waves[run.currentWave] || []
+
+    // Poll all nodes in current wave
+    await Promise.allSettled(waveNodeIds.map(async nodeId => {
+      const nodeDef = nodes.find(n => n.id === nodeId)
+      if (!nodeDef) return
+      if (nodeDef.type === 'task')  await pollTaskNode(run, nodeId, nodeDef)
+      if (nodeDef.type === 'group') await pollGroupNode(run, nodeId, nodeDef, nodes, edges)
+    }))
+
+    // Check if wave is complete
+    const waveComplete = waveNodeIds.every(id => DONE_NODE.has(run.nodes[id]?.status))
+    if (!waveComplete) { await redisSetObj(RUN_KEY, run); return run }
+
+    // Check for blocking errors (errorStrategy === 'stop')
+    const hasBlockingError = waveNodeIds.some(id => {
+      if (run.nodes[id]?.status !== 'error') return false
+      const nodeDef = nodes.find(n => n.id === id)
+      return (nodeDef?.data?.errorStrategy || 'stop') === 'stop'
+    })
+
+    if (hasBlockingError) {
+      run.status = 'error'; run.finishedAt = new Date().toISOString()
+      for (const futureWave of run.waves.slice(run.currentWave + 1)) {
+        for (const nid of futureWave) if (run.nodes[nid]) run.nodes[nid].status = 'skipped'
+      }
+    } else if (run.currentWave < run.waves.length - 1) {
+      run.currentWave++
+      run = await executeWave(run, run.currentWave, nodes, edges)
+    } else {
+      const anyErr = Object.values(run.nodes).some(ns => ns.status === 'error')
+      run.status = anyErr ? 'error' : 'success'
+      run.finishedAt = new Date().toISOString()
+    }
+
+    await redisSetObj(RUN_KEY, run)
+    return run
+  })
+  if (locked !== null) return locked
+  return redisGetObj(`cids:orch_run:${orchestrationId}`)
 }
 
 // ─── Cancel run ───────────────────────────────────────────────────────────────
 
 async function cancelRun(orchestrationId) {
-  const RUN_KEY = `cids:orch_run:${orchestrationId}`
-  const run = await redisGetObj(RUN_KEY)
-  if (!run) throw new Error('No hay ejecución registrada')
-  if (TERMINAL_RUN.has(run.status)) {
-    const err = new Error('La ejecución ya está en estado terminal'); err.statusCode = 409; throw err
-  }
-
-  const now = new Date().toISOString()
-  // Cancel all running SAP tasks (best-effort)
-  await Promise.allSettled(Object.values(run.nodes).flatMap(ns => {
-    const tasks = []
-    if (ns.type === 'task' && ns.status === 'running' && ns.sapRunId) {
-      tasks.push(soapRequest(run.connectionId, 'cancelTask', { runId: ns.sapRunId }).catch(() => {}))
+  const locked = await withRunLock(orchestrationId, async () => {
+    const RUN_KEY = `cids:orch_run:${orchestrationId}`
+    const run = await redisGetObj(RUN_KEY)
+    if (!run) throw new Error('No hay ejecución registrada')
+    if (TERMINAL_RUN.has(run.status)) {
+      const err = new Error('La ejecución ya está en estado terminal'); err.statusCode = 409; throw err
     }
-    if (ns.type === 'group') {
-      for (const cs of Object.values(ns.children || {})) {
-        if (cs.status === 'running' && cs.sapRunId) {
-          tasks.push(soapRequest(run.connectionId, 'cancelTask', { runId: cs.sapRunId }).catch(() => {}))
+
+    const now = new Date().toISOString()
+    // Cancel all running SAP tasks (best-effort)
+    await Promise.allSettled(Object.values(run.nodes).flatMap(ns => {
+      const tasks = []
+      if (ns.type === 'task' && ns.status === 'running' && ns.sapRunId) {
+        tasks.push(soapRequest(run.connectionId, 'cancelTask', { runId: ns.sapRunId }).catch(() => {}))
+      }
+      if (ns.type === 'group') {
+        for (const cs of Object.values(ns.children || {})) {
+          if (cs.status === 'running' && cs.sapRunId) {
+            tasks.push(soapRequest(run.connectionId, 'cancelTask', { runId: cs.sapRunId }).catch(() => {}))
+          }
+        }
+      }
+      return tasks
+    }))
+
+    run.status = 'cancelled'; run.finishedAt = now
+    for (const ns of Object.values(run.nodes)) {
+      if (ns.status === 'running') ns.status = 'cancelled'
+      ns.finishedAt = now
+      if (ns.status === 'pending') ns.status = 'skipped'
+      if (ns.type === 'group') {
+        for (const cs of Object.values(ns.children || {})) {
+          if (cs.status === 'running') { cs.status = 'cancelled'; cs.finishedAt = now }
+          if (cs.status === 'pending') cs.status = 'skipped'
         }
       }
     }
-    return tasks
-  }))
 
-  run.status = 'cancelled'; run.finishedAt = now
-  for (const ns of Object.values(run.nodes)) {
-    if (ns.status === 'running') ns.status = 'cancelled'; ns.finishedAt = now
-    if (ns.status === 'pending') ns.status = 'skipped'
-    if (ns.type === 'group') {
-      for (const cs of Object.values(ns.children || {})) {
-        if (cs.status === 'running') { cs.status = 'cancelled'; cs.finishedAt = now }
-        if (cs.status === 'pending') cs.status = 'skipped'
-      }
-    }
-  }
-
-  await redisSetObj(RUN_KEY, run)
-  return run
+    await redisSetObj(RUN_KEY, run)
+    return run
+  })
+  if (locked !== null) return locked
+  return redisGetObj(`cids:orch_run:${orchestrationId}`)
 }
 
 // ─── Handler ──────────────────────────────────────────────────────────────────
