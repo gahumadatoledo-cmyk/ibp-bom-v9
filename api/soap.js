@@ -156,14 +156,14 @@ function buildBody(operation, params = {}) {
       const vars = (params.globalVariables || [])
         .map(v => `<variable name="${xe(v.name)}">${xe(v.value)}</variable>`)
         .join('\n      ')
-      return `<web:taskInfo>
+      return `<web:runTaskRequest>
         <taskName>${xe(params.taskName)}</taskName>
         <description>${xe(params.description || '')}</description>
         ${params.agentName  ? `<agentName>${xe(params.agentName)}</agentName>` : ''}
         ${params.agentGroup ? `<agentGroup>${xe(params.agentGroup)}</agentGroup>` : ''}
         ${params.profileName ? `<profileName>${xe(params.profileName)}</profileName>` : ''}
         ${vars ? `<globalVariables>${vars}</globalVariables>` : ''}
-      </web:taskInfo>`
+      </web:runTaskRequest>`
     }
 
     case 'getTaskStatusByRunId2':
