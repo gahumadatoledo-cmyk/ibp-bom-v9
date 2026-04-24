@@ -109,7 +109,7 @@ function CanvasInner({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [run])
 
-  // Recompute groupMode whenever edges change
+  // Recompute groupMode whenever graph structure changes
   useEffect(() => {
     setNodes(nds => nds.map(n => {
       if (n.type !== 'orchGroup') return n
@@ -118,7 +118,7 @@ function CanvasInner({
       return { ...n, data: { ...n.data, groupMode: mode } }
     }))
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [edges])
+  }, [edges, nodes.length])
 
   function handleNodeSelect(nodeId) { onNodeSelect(nodeId) }
 
