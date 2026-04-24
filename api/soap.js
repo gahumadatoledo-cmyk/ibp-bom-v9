@@ -38,13 +38,13 @@ function decrypt(text) {
 
 /** Extract the inner text of the first matching tag (namespace-agnostic) */
 function xmlVal(xml, tag) {
-  const m = xml.match(new RegExp(`<(?:[\\w]+:)?${tag}[^>]*>([\\s\\S]*?)<\\/(?:[\\w]+:)?${tag}>`, 'i'))
+  const m = xml.match(new RegExp(`<(?:[\\w]+:)?${tag}(?:\\s[^>]*)?>([\\s\\S]*?)<\\/(?:[\\w]+:)?${tag}>`, 'i'))
   return m ? m[1].trim() : null
 }
 
 /** Extract all occurrences of a tag as an array of raw XML strings */
 function xmlAll(xml, tag) {
-  const re = new RegExp(`<(?:[\\w]+:)?${tag}[^>]*>[\\s\\S]*?<\\/(?:[\\w]+:)?${tag}>`, 'gi')
+  const re = new RegExp(`<(?:[\\w]+:)?${tag}(?:\\s[^>]*)?>[\\s\\S]*?<\\/(?:[\\w]+:)?${tag}>`, 'gi')
   return [...xml.matchAll(re)].map(m => m[0])
 }
 
@@ -243,14 +243,22 @@ function parseResponse(operation, xml) {
       }))
 
     case 'getTaskInfo': {
-      const vars = xmlAll(xml, 'globalVariables').map(v => ({
+      const varElems =
+        xmlAll(xml, 'globalVariable').length > 0
+          ? xmlAll(xml, 'globalVariable')
+          : xmlAll(xml, 'globalVariables')
+      const vars = varElems.map(v => ({
         name:         xmlVal(v, 'name'),
         description:  xmlVal(v, 'description'),
         dataType:     xmlVal(v, 'dataType'),
         defaultValue: xmlVal(v, 'defaultValue'),
         length:       xmlVal(v, 'length'),
       }))
-      const props = xmlAll(xml, 'properties').map(p => ({
+      const propElems =
+        xmlAll(xml, 'property').length > 0
+          ? xmlAll(xml, 'property')
+          : xmlAll(xml, 'properties')
+      const props = propElems.map(p => ({
         name:    xmlVal(p, 'name'),
         value:   xmlVal(p, 'value'),
         caption: xmlVal(p, 'caption'),
@@ -266,11 +274,11 @@ function parseResponse(operation, xml) {
     }
 
     case 'getAgents':
-      return xmlAll(xml, 'return').map(g => ({
+      return xmlAll(xml, 'agentGroups').map(g => ({
         name:        xmlVal(g, 'name'),
         guid:        xmlVal(g, 'guid'),
         description: xmlVal(g, 'description'),
-        agents: xmlAll(g, 'agents').map(a => ({
+        agents: xmlAll(g, 'agent').map(a => ({
           name:          xmlVal(a, 'name'),
           guid:          xmlVal(a, 'guid'),
           description:   xmlVal(a, 'description'),
@@ -281,11 +289,11 @@ function parseResponse(operation, xml) {
       }))
 
     case 'getSystemConfigurations':
-      return xmlAll(xml, 'return').map(s => ({
+      return xmlAll(xml, 'sysConfigurations').map(s => ({
         name:        xmlVal(s, 'name'),
         guid:        xmlVal(s, 'guid'),
         description: xmlVal(s, 'description'),
-        dsConfigurations: xmlAll(s, 'dsConfigurations').map(d => ({
+        dsConfigurations: xmlAll(s, 'dsConfiguration').map(d => ({
           dataStoreName:              xmlVal(d, 'dataStoreName'),
           dataStoreConfigurationName: xmlVal(d, 'dataStoreConfigurationName'),
         })),
@@ -418,6 +426,9 @@ export default async function handler(req, res) {
     }
 
     const result = parseResponse(operation, text)
+    if (params._debug) {
+      return res.json({ _result: result, _rawXml: text })
+    }
     return res.json(result)
 
   } catch (e) {

@@ -77,6 +77,7 @@ function validateNodeData(data = {}) {
     errorStrategy:   VALID_STRATEGIES.has(data.errorStrategy) ? data.errorStrategy : 'stop',
     maxRetries:      Math.min(5, Math.max(0, Number(data.maxRetries ?? 0))),
     retryDelaySec:   Math.min(3600, Math.max(0, Number(data.retryDelaySec ?? 30))),
+    executionMode:   data.executionMode === 'serial' ? 'serial' : 'parallel',
     children:        Array.isArray(data.children) ? data.children : [],
     runStatus:       undefined, // never persist transient run state in node data
   }

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, useImperativeHandle } from 'react'
 import {
   ReactFlow, ReactFlowProvider, Background, Controls, MiniMap,
   useNodesState, useEdgesState, addEdge, useReactFlow, Panel,
@@ -17,30 +17,44 @@ const EDGE_DEFAULTS = {
   animated: false,
 }
 
-function toRFNodes(nodes, run, onSelect) {
+// Determines if a group's children form a parallel, serial, or hybrid execution
+function computeGroupMode(groupId, allNodes, allEdges) {
+  const children = allNodes.filter(n => n.parentId === groupId)
+  if (children.length === 0) return 'parallel'
+  const internalEdges = allEdges.filter(e =>
+    children.some(c => c.id === e.source) && children.some(c => c.id === e.target)
+  )
+  if (internalEdges.length === 0) return 'parallel'
+  const connectedIds = new Set([
+    ...internalEdges.map(e => e.source),
+    ...internalEdges.map(e => e.target),
+  ])
+  return children.every(c => connectedIds.has(c.id)) ? 'serial' : 'hybrid'
+}
+
+function toRFNodes(nodes, run, onSelect, onRunSingle, edges = []) {
   return nodes.map(n => {
-    // Map storage types → React Flow node types
     const rfType = n.type === 'task' ? 'orchTask' : n.type === 'group' ? 'orchGroup' : n.type
     const ns = run?.nodes?.[n.id]
     const runStatus = ns?.status || 'pending'
-    // For group: summarize children
     let childSummary = null
-    if ((rfType === 'orchGroup') && ns?.children) {
+    if (rfType === 'orchGroup' && ns?.children) {
       const vals = Object.values(ns.children)
       if (vals.length) {
         const done = vals.filter(c => !['pending', 'running'].includes(c.status)).length
         childSummary = `${done}/${vals.length} completadas`
       }
     }
+    const groupMode = rfType === 'orchGroup' ? computeGroupMode(n.id, nodes, edges) : null
     return {
       ...n,
       type: rfType,
-      data: { ...n.data, runStatus, sapRunId: ns?.sapRunId || null, childSummary, onSelect },
+      data: { ...n.data, runStatus, sapRunId: ns?.sapRunId || null, childSummary, onSelect, onRunSingle: rfType === 'orchTask' ? onRunSingle : undefined, groupMode },
     }
   })
 }
 
-function toRFEdges(edges, run, nodes) {
+function toRFEdges(edges, run) {
   return edges.map(e => {
     const targetNs = run?.nodes?.[e.target]
     const sourceNs = run?.nodes?.[e.source]
@@ -57,36 +71,60 @@ function toRFEdges(edges, run, nodes) {
 
 function CanvasInner({
   orchId, initialNodes, initialEdges, run, isRunning,
-  onSave, onNodeSelect, onAddGroup: addGroupExternal,
+  onSave, onNodeSelect, onAddGroup: addGroupExternal, onRunSingle, autoConnect, ref,
 }) {
   const [nodes, setNodes, onNodesChange] = useNodesState([])
   const [edges, setEdges, onEdgesChange] = useEdgesState([])
-  const rfInstance = useReactFlow()
-  const saveTimer  = useRef(null)
+  const rfInstance  = useReactFlow()
+  const saveTimer   = useRef(null)
   const [cycleErr, setCycleErr] = useState(false)
+  const lastTaskRef = useRef(null)
+
+  useImperativeHandle(ref, () => ({
+    patchNodeData: (nodeId, patch) => {
+      clearTimeout(saveTimer.current)
+      setNodes(nds => nds.map(n => n.id === nodeId ? { ...n, data: { ...n.data, ...patch } } : n))
+    },
+    deleteNode: (nodeId) => {
+      clearTimeout(saveTimer.current)
+      setNodes(nds => nds.filter(n => n.id !== nodeId && n.parentId !== nodeId))
+      setEdges(eds => eds.filter(e => e.source !== nodeId && e.target !== nodeId))
+    },
+  }))
 
   // Re-init when orchestration changes
   useEffect(() => {
-    setNodes(toRFNodes(initialNodes, run, handleNodeSelect))
-    setEdges(toRFEdges(initialEdges, run, initialNodes))
+    setNodes(toRFNodes(initialNodes, run, handleNodeSelect, onRunSingle, initialEdges))
+    setEdges(toRFEdges(initialEdges, run))
     setCycleErr(false)
+    lastTaskRef.current = null
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orchId])
 
   // Merge run state without reinitializing layout
   useEffect(() => {
     if (!run) return
-    setNodes(nds => toRFNodes(nds, run, handleNodeSelect))
-    setEdges(eds => toRFEdges(eds, run, nodes))
+    setNodes(nds => toRFNodes(nds, run, handleNodeSelect, onRunSingle, edges))
+    setEdges(eds => toRFEdges(eds, run))
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [run])
+
+  // Recompute groupMode whenever edges change
+  useEffect(() => {
+    setNodes(nds => nds.map(n => {
+      if (n.type !== 'orchGroup') return n
+      const mode = computeGroupMode(n.id, nds, edges)
+      if (n.data.groupMode === mode) return n
+      return { ...n, data: { ...n.data, groupMode: mode } }
+    }))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [edges])
 
   function handleNodeSelect(nodeId) { onNodeSelect(nodeId) }
 
   function debounced_save(nds, eds) {
     clearTimeout(saveTimer.current)
     saveTimer.current = setTimeout(() => {
-      // Strip RF-internal fields, keep only what backend needs
       const cleanNodes = nds.map(({ id, type, position, parentId, extent, style, data }) => ({
         id,
         type: type === 'orchTask' ? 'task' : type === 'orchGroup' ? 'group' : type,
@@ -94,11 +132,10 @@ function CanvasInner({
         ...(parentId ? { parentId, extent } : {}),
         ...(style ? { style } : {}),
         data: {
-          taskName: data.taskName, label: data.label,
+          taskName: data.taskName, taskGuid: data.taskGuid, label: data.label,
           agentName: data.agentName, profileName: data.profileName,
           errorStrategy: data.errorStrategy, maxRetries: data.maxRetries,
           retryDelaySec: data.retryDelaySec,
-          executionMode: data.executionMode || 'parallel',
           globalVariables: data.globalVariables || [],
           children: data.children || [],
         },
@@ -110,7 +147,9 @@ function CanvasInner({
 
   function handleNodesChange(changes) {
     onNodesChange(changes)
-    setNodes(nds => { debounced_save(nds, edges); return nds })
+    if (changes.some(c => c.type !== 'select')) {
+      setNodes(nds => { debounced_save(nds, edges); return nds })
+    }
   }
 
   function handleEdgesChange(changes) {
@@ -127,8 +166,11 @@ function CanvasInner({
   }, [edges, nodes])
 
   const isValidConnection = useCallback((connection) => {
-    return connection.source !== connection.target
-  }, [])
+    if (connection.source === connection.target) return false
+    const src = nodes.find(n => n.id === connection.source)
+    const tgt = nodes.find(n => n.id === connection.target)
+    return (src?.parentId || null) === (tgt?.parentId || null)
+  }, [nodes])
 
   // ── Drop handler ──────────────────────────────────────────────────────────
   const onDragOver = useCallback((e) => {
@@ -143,11 +185,13 @@ function CanvasInner({
     const { taskName, taskGuid, type } = JSON.parse(raw)
     const position = rfInstance.screenToFlowPosition({ x: e.clientX, y: e.clientY })
 
-    // Check if dropped inside a group node
-    const groupNode = nodes.find(n => n.type === 'orchGroup' && !n.parentId && n.style && (
-      position.x >= n.position.x && position.x <= n.position.x + (n.style.width || 300) &&
-      position.y >= n.position.y && position.y <= n.position.y + (n.style.height || 200)
-    ))
+    const groupNode = nodes.find(n => {
+      if (n.type !== 'orchGroup' || n.parentId) return false
+      const w = n.width  || n.style?.width  || 300
+      const h = n.height || n.style?.height || 200
+      return position.x >= n.position.x && position.x <= n.position.x + w
+          && position.y >= n.position.y && position.y <= n.position.y + h
+    })
 
     const newId = crypto.randomUUID()
     const newNode = {
@@ -157,7 +201,7 @@ function CanvasInner({
         : position,
       ...(groupNode ? { parentId: groupNode.id, extent: 'parent' } : {}),
       data: {
-        taskName, label: taskName, agentName: null, profileName: null,
+        taskName, taskGuid, label: taskName, agentName: null, profileName: null,
         errorStrategy: 'stop', maxRetries: 0, retryDelaySec: 30,
         globalVariables: [], children: [],
         runStatus: 'pending', onSelect: handleNodeSelect,
@@ -165,9 +209,22 @@ function CanvasInner({
     }
 
     const newNodes = [...nodes, newNode]
+    let newEdges = edges
+
+    // Auto-connect: link new top-level task to the last one added
+    if (autoConnect && !groupNode && lastTaskRef.current) {
+      const prevExists = nodes.some(n => n.id === lastTaskRef.current && n.type === 'orchTask' && !n.parentId)
+      if (prevExists) {
+        const autoEdge = { id: crypto.randomUUID(), source: lastTaskRef.current, target: newId, ...EDGE_DEFAULTS }
+        newEdges = addEdge(autoEdge, edges)
+      }
+    }
+    if (!groupNode) lastTaskRef.current = newId
+
     setNodes(newNodes)
-    debounced_save(newNodes, edges)
-  }, [nodes, edges, rfInstance])
+    if (newEdges !== edges) setEdges(newEdges)
+    debounced_save(newNodes, newEdges)
+  }, [nodes, edges, rfInstance, autoConnect])
 
   // ── Add group ────────────────────────────────────────────────────────────
   function addGroup() {
@@ -180,8 +237,7 @@ function CanvasInner({
       position: { x: center.x - 150, y: center.y - 90 },
       style: { width: 300, height: 180 },
       data: {
-        label: 'Grupo paralelo', children: [],
-        executionMode: 'parallel',
+        label: 'Nuevo grupo', children: [],
         runStatus: 'pending', onSelect: handleNodeSelect,
       },
     }
@@ -189,17 +245,19 @@ function CanvasInner({
     setNodes(newNodes)
     debounced_save(newNodes, edges)
   }
-  // expose to parent via prop
   useEffect(() => { addGroupExternal.current = addGroup }, [nodes, edges])
 
   // ── Auto layout ──────────────────────────────────────────────────────────
   function handleAutoLayout() {
     const laid = autoLayout(nodes, edges)
-    const updated = toRFNodes(laid, run, handleNodeSelect)
+    const updated = toRFNodes(laid, run, handleNodeSelect, onRunSingle, edges)
     setNodes(updated)
     debounced_save(updated, edges)
     setTimeout(() => rfInstance.fitView({ padding: 0.15 }), 50)
   }
+
+  // Reset last task chain when autoConnect is turned off externally
+  useEffect(() => { if (!autoConnect) lastTaskRef.current = null }, [autoConnect])
 
   const nodeColor = (n) => STATUS_COLORS[n.data?.runStatus || 'pending'] || '#64748b'
 
@@ -244,7 +302,6 @@ function CanvasInner({
             </div>
           </Panel>
         )}
-
         {nodes.length === 0 && (
           <Panel position="center">
             <div style={{ textAlign: 'center', color: 'var(--text2)', pointerEvents: 'none' }}>
@@ -271,10 +328,12 @@ const toolbarBtn = {
 
 // ─── Public wrapper (provides context) ───────────────────────────────────────
 
-export default function OrchestrationsCanvas(props) {
+function OrchestrationsCanvas({ ref, autoConnect = false, ...props }) {
   return (
     <ReactFlowProvider>
-      <CanvasInner {...props} />
+      <CanvasInner ref={ref} autoConnect={autoConnect} {...props} />
     </ReactFlowProvider>
   )
 }
+
+export default OrchestrationsCanvas

@@ -13,10 +13,14 @@ export function useOrchestration(connection) {
   const [saving, setSaving]   = useState(false)
   const [starting, setStarting]   = useState(false)
   const [cancelling, setCancelling] = useState(false)
-  const pollRef = useRef(null)
+  const pollRef          = useRef(null)
+  const prevStatusRef    = useRef(null)
+  const orchNameRef      = useRef('')
 
-  const selected = orchs.find(o => o.id === selectedId) || null
+  const selected  = orchs.find(o => o.id === selectedId) || null
   const isRunning = run?.status === 'running'
+
+  useEffect(() => { orchNameRef.current = selected?.name || '' }, [selected?.name])
 
   // ── Load orchestrations ──────────────────────────────────────────────────
   const loadOrchs = useCallback(async () => {
@@ -42,11 +46,21 @@ export function useOrchestration(connection) {
   }, [selectedId])
 
   // ── Polling ──────────────────────────────────────────────────────────────
+  function fireNotification(status) {
+    if (!('Notification' in window) || Notification.permission !== 'granted') return
+    const body = { success: 'Completada correctamente', error: 'Finalizó con error', cancelled: 'Cancelada' }
+    new Notification(orchNameRef.current || 'Orquestación', { body: body[status] || status })
+  }
+
   const doTick = useCallback(async () => {
     if (!selectedId) return
     try {
       const res  = await fetch(`/api/orchestrate?orchestrationId=${selectedId}&action=tick`)
       const data = await res.json()
+      if (data && TERMINAL.has(data.status) && prevStatusRef.current === 'running') {
+        fireNotification(data.status)
+      }
+      prevStatusRef.current = data?.status || null
       setRun(data)
       if (data && TERMINAL.has(data.status)) {
         clearInterval(pollRef.current); pollRef.current = null
@@ -95,6 +109,9 @@ export function useOrchestration(connection) {
 
   async function saveGraph(nodes, edges) {
     if (!selectedId) return
+    // Optimistic: update local state immediately so controlled inputs don't revert
+    // while the PUT request is in flight
+    setOrchs(prev => prev.map(o => o.id === selectedId ? { ...o, nodes, edges } : o))
     setSaving(true)
     try {
       const res = await fetch('/api/orchestrations', {
@@ -104,7 +121,6 @@ export function useOrchestration(connection) {
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
-      setOrchs(prev => prev.map(o => o.id === selectedId ? { ...o, nodes, edges } : o))
     } catch (e) { console.error('Save error:', e.message) }
     setSaving(false)
   }
@@ -126,6 +142,10 @@ export function useOrchestration(connection) {
   async function handleStart({ agentName = null, profileName = null } = {}) {
     if (!selectedId || isRunning || starting) return
     setStarting(true)
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission()
+    }
+    prevStatusRef.current = null
     try {
       const res = await fetch('/api/orchestrate', {
         method: 'POST',
