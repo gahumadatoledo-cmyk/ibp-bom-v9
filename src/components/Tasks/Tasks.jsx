@@ -226,6 +226,22 @@ function RunModal({ task, connectionId, onClose, onSuccess, addLog }) {
 
   useEffect(() => {
     async function init() {
+      // TEMP DEBUG
+      if (import.meta.env.DEV) {
+        fetch('/api/soap', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            connectionId,
+            operation: 'getTaskInfo',
+            params: { taskGuid: task.taskGuid, _debug: true },
+          }),
+        })
+          .then(r => r.json())
+          .then(d => console.log('[getTaskInfo raw]', d._rawXml))
+          .catch(console.error)
+      }
+      // END TEMP DEBUG
       try {
         const [info, agentGroups, profs] = await Promise.all([
           soapCall(connectionId, 'getTaskInfo', { taskGuid: task.taskGuid }),

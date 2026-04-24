@@ -243,14 +243,22 @@ function parseResponse(operation, xml) {
       }))
 
     case 'getTaskInfo': {
-      const vars = xmlAll(xml, 'globalVariables').map(v => ({
+      const varElems =
+        xmlAll(xml, 'globalVariable').length > 0
+          ? xmlAll(xml, 'globalVariable')
+          : xmlAll(xml, 'globalVariables')
+      const vars = varElems.map(v => ({
         name:         xmlVal(v, 'name'),
         description:  xmlVal(v, 'description'),
         dataType:     xmlVal(v, 'dataType'),
         defaultValue: xmlVal(v, 'defaultValue'),
         length:       xmlVal(v, 'length'),
       }))
-      const props = xmlAll(xml, 'properties').map(p => ({
+      const propElems =
+        xmlAll(xml, 'property').length > 0
+          ? xmlAll(xml, 'property')
+          : xmlAll(xml, 'properties')
+      const props = propElems.map(p => ({
         name:    xmlVal(p, 'name'),
         value:   xmlVal(p, 'value'),
         caption: xmlVal(p, 'caption'),
