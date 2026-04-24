@@ -125,21 +125,31 @@ function CanvasInner({
   function debounced_save(nds, eds) {
     clearTimeout(saveTimer.current)
     saveTimer.current = setTimeout(() => {
-      const cleanNodes = nds.map(({ id, type, position, parentId, extent, style, data }) => ({
-        id,
-        type: type === 'orchTask' ? 'task' : type === 'orchGroup' ? 'group' : type,
-        position,
-        ...(parentId ? { parentId, extent } : {}),
-        ...(style ? { style } : {}),
-        data: {
-          taskName: data.taskName, taskGuid: data.taskGuid, label: data.label,
-          agentName: data.agentName, profileName: data.profileName,
-          errorStrategy: data.errorStrategy, maxRetries: data.maxRetries,
-          retryDelaySec: data.retryDelaySec,
-          globalVariables: data.globalVariables || [],
-          children: data.children || [],
-        },
-      }))
+      const cleanNodes = nds.map(({ id, type, position, parentId, extent, style, width, height, data }) => {
+        const normalizedType = type === 'orchTask' ? 'task' : type === 'orchGroup' ? 'group' : type
+        const persistedStyle = normalizedType === 'group'
+          ? {
+            ...(style || {}),
+            ...(width ? { width } : {}),
+            ...(height ? { height } : {}),
+          }
+          : style
+        return {
+          id,
+          type: normalizedType,
+          position,
+          ...(parentId ? { parentId, extent } : {}),
+          ...(persistedStyle ? { style: persistedStyle } : {}),
+          data: {
+            taskName: data.taskName, taskGuid: data.taskGuid, label: data.label,
+            agentName: data.agentName, profileName: data.profileName,
+            errorStrategy: data.errorStrategy, maxRetries: data.maxRetries,
+            retryDelaySec: data.retryDelaySec,
+            globalVariables: data.globalVariables || [],
+            children: data.children || [],
+          },
+        }
+      })
       const cleanEdges = eds.map(({ id, source, target }) => ({ id, source, target }))
       onSave(cleanNodes, cleanEdges)
     }, 600)
