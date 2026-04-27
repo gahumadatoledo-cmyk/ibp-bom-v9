@@ -243,17 +243,25 @@ function parseResponse(operation, xml) {
       }))
 
     case 'getTaskInfo': {
-      const varElems =
-        xmlAll(xml, 'globalVariable').length > 0
-          ? xmlAll(xml, 'globalVariable')
-          : xmlAll(xml, 'globalVariables')
+      let varElems = xmlAll(xml, 'globalVariable')
+      if (varElems.length === 0) {
+        const containers = xmlAll(xml, 'globalVariables')
+        if (containers.length === 1) {
+          const inner = xmlAll(containers[0], 'globalVariable')
+          varElems = inner.length > 0 ? inner : xmlAll(containers[0], 'variable')
+          if (varElems.length === 0) varElems = containers
+        } else if (containers.length > 1) {
+          varElems = containers
+        }
+      }
+      if (varElems.length === 0) varElems = xmlAll(xml, 'variable')
       const vars = varElems.map(v => ({
         name:         xmlVal(v, 'name'),
         description:  xmlVal(v, 'description'),
         dataType:     xmlVal(v, 'dataType'),
         defaultValue: xmlVal(v, 'defaultValue'),
         length:       xmlVal(v, 'length'),
-      }))
+      })).filter(v => v.name)
       const propElems =
         xmlAll(xml, 'property').length > 0
           ? xmlAll(xml, 'property')

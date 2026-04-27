@@ -47,7 +47,7 @@ async function soapCall(connectionId, operation, params = {}) {
   return data
 }
 
-export default function TaskMonitor({ connection }) {
+export default function TaskMonitor({ connection, initialSearch, onSearchConsumed }) {
   const [rows, setRows]           = useState([])
   const [loading, setLoading]     = useState(true)
   const [error, setError]         = useState('')
@@ -67,6 +67,10 @@ export default function TaskMonitor({ connection }) {
 
   const [fromDate, setFromDate] = useState(() => isoNow(-7))
   const [toDate,   setToDate]   = useState(() => isoNow(0))
+
+  useEffect(() => {
+    if (initialSearch) { setSearch(initialSearch); onSearchConsumed?.() }
+  }, [initialSearch])
 
   const MAX_DAYS = 90
   const rangeDays = fromDate && toDate

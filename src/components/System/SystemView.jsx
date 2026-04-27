@@ -15,6 +15,7 @@ const TABS = [
 export default function SystemView({ connection }) {
   const [activeTab, setActiveTab]           = useState('resumen')
   const [headerCollapsed, setHeaderCollapsed] = useState(false)
+  const [pendingTaskName, setPendingTaskName] = useState(null)
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -77,8 +78,8 @@ export default function SystemView({ connection }) {
       {/* Content */}
       <div style={{ flex: 1, overflow: 'auto' }}>
         {activeTab === 'resumen'        && <Resumen         connection={connection} />}
-        {activeTab === 'tasks'          && <Tasks            connection={connection} />}
-        {activeTab === 'monitor'        && <TaskMonitor      connection={connection} />}
+        {activeTab === 'tasks'          && <Tasks            connection={connection} onTaskRun={(name) => { setPendingTaskName(name); setActiveTab('monitor') }} />}
+        {activeTab === 'monitor'        && <TaskMonitor      connection={connection} initialSearch={pendingTaskName} onSearchConsumed={() => setPendingTaskName(null)} />}
         {activeTab === 'orchestrations' && <Orchestrations   connection={connection} />}
       </div>
     </div>

@@ -14,7 +14,7 @@ async function soapCall(connectionId, operation, params = {}) {
   return data
 }
 
-export default function Tasks({ connection }) {
+export default function Tasks({ connection, onTaskRun }) {
   const [projects, setProjects]   = useState([])
   const [expanded, setExpanded]   = useState({})
   const [tasks, setTasks]         = useState({})     // projectGuid → tasks[]
@@ -175,6 +175,7 @@ export default function Tasks({ connection }) {
           onClose={() => setRunModal(null)}
           onSuccess={() => setRunModal(null)}
           addLog={addLog}
+          onTaskRun={onTaskRun}
         />
       )}
     </div>
@@ -213,7 +214,7 @@ function TaskRow({ task, connectionId, onRun, isLast }) {
   )
 }
 
-function RunModal({ task, connectionId, onClose, onSuccess, addLog }) {
+function RunModal({ task, connectionId, onClose, onSuccess, addLog, onTaskRun }) {
   const [step, setStep]           = useState('loading') // loading | form | running | done | error
   const [taskInfo, setTaskInfo]   = useState(null)
   const [agents, setAgents]       = useState([])
@@ -226,22 +227,19 @@ function RunModal({ task, connectionId, onClose, onSuccess, addLog }) {
 
   useEffect(() => {
     async function init() {
-      // TEMP DEBUG
       if (import.meta.env.DEV) {
         fetch('/api/soap', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            connectionId,
-            operation: 'getTaskInfo',
-            params: { taskGuid: task.taskGuid, _debug: true },
-          }),
+          body: JSON.stringify({ connectionId, operation: 'getTaskInfo', params: { taskGuid: task.taskGuid, _debug: true } }),
         })
           .then(r => r.json())
-          .then(d => console.log('[getTaskInfo raw]', d._rawXml))
+          .then(d => {
+            console.log('[getTaskInfo raw]', d._rawXml)
+            addLog({ method: 'DBG', path: 'getTaskInfo vars', status: 200, duration: 0, detail: `vars=${d._result?.globalVariables?.length ?? 0} | ${d._rawXml?.slice(0, 400)}` })
+          })
           .catch(console.error)
       }
-      // END TEMP DEBUG
       try {
         const [info, agentGroups, profs] = await Promise.all([
           soapCall(connectionId, 'getTaskInfo', { taskGuid: task.taskGuid }),
@@ -357,9 +355,11 @@ function RunModal({ task, connectionId, onClose, onSuccess, addLog }) {
             <div style={{ color: 'var(--green)', fontWeight: 700, fontSize: 13, marginBottom: 8 }}>✓ Task enviada</div>
             <div style={{ fontSize: 12, color: 'var(--text2)', marginBottom: 20 }}>
               RunID: <span style={{ fontFamily: 'var(--mono)', color: 'var(--text)' }}>{runId}</span>
-              <br />Puedes seguir el estado en la pestaña <strong>Task Monitor</strong>.
             </div>
-            <button onClick={onSuccess} style={{ padding: '7px 18px', borderRadius: 6, border: 'none', background: 'var(--accent)', color: '#000', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>Cerrar</button>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+              <button onClick={onSuccess} style={{ padding: '7px 18px', borderRadius: 6, border: '1px solid var(--border)', background: 'none', color: 'var(--text2)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Cerrar</button>
+              <button onClick={() => { onTaskRun?.(task.taskName); onClose() }} style={{ padding: '7px 18px', borderRadius: 6, border: 'none', background: 'var(--accent)', color: '#000', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>▶ Ver en Task Monitor →</button>
+            </div>
           </div>
         )}
 
