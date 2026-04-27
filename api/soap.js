@@ -75,6 +75,10 @@ function parseFault(xml) {
   return null
 }
 
+function sanitizeSessionId(xml = '') {
+  return xml.replace(/<(?:[\w]+:)?SessionId>([\s\S]*?)<\/(?:[\w]+:)?SessionId>/gi, '<SessionId>[redacted]</SessionId>')
+}
+
 // ─── SOAP envelope builder ────────────────────────────────────────────────────
 
 function buildEnvelope(body, sessionId, version) {
@@ -435,7 +439,13 @@ export default async function handler(req, res) {
 
     const result = parseResponse(operation, text)
     if (params._debug) {
-      return res.json({ _result: result, _rawXml: text })
+      return res.json({
+        _result: result,
+        _soapAction: soapAction,
+        _requestBodyXml: body,
+        _requestEnvelopeXml: sanitizeSessionId(envelope),
+        _rawXml: text,
+      })
     }
     return res.json(result)
 

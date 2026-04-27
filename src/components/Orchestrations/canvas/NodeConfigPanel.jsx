@@ -83,6 +83,14 @@ export default function NodeConfigPanel({ node, connection, onUpdate, onClose })
         taskGuid = match?.taskGuid
       }
       if (!taskGuid) { if (!cancelled) setVarsStatus('error'); return }
+      if (import.meta.env.DEV) {
+        soapCall(connection.id, 'getTaskInfo', { taskGuid, _debug: true })
+          .then(d => {
+            console.log('[NodeConfig getTaskInfo request envelope]', d._requestEnvelopeXml)
+            console.log('[NodeConfig getTaskInfo raw]', d._rawXml)
+          })
+          .catch(() => {})
+      }
       const info = await soapCall(connection.id, 'getTaskInfo', { taskGuid })
       if (cancelled) return
       const vars = Array.isArray(info?.globalVariables) ? info.globalVariables : []

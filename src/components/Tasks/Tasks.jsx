@@ -235,8 +235,9 @@ function RunModal({ task, connectionId, onClose, onSuccess, addLog, onTaskRun })
         })
           .then(r => r.json())
           .then(d => {
+            console.log('[getTaskInfo request envelope]', d._requestEnvelopeXml)
             console.log('[getTaskInfo raw]', d._rawXml)
-            addLog({ method: 'DBG', path: 'getTaskInfo vars', status: 200, duration: 0, detail: `vars=${d._result?.globalVariables?.length ?? 0} | ${d._rawXml?.slice(0, 400)}` })
+            addLog({ method: 'DBG', path: 'getTaskInfo vars', status: 200, duration: 0, detail: `vars=${d._result?.globalVariables?.length ?? 0} | req=${d._requestBodyXml?.slice(0, 180)} | res=${d._rawXml?.slice(0, 220)}` })
           })
           .catch(console.error)
       }
