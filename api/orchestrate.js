@@ -6,6 +6,8 @@ const REDIS_TOKEN = process.env.KV_REST_API_TOKEN
 
 const SUCCESS_CODES      = new Set(['SUCCESS', 'SUCCESS_WITH_ERRORS_D', 'SUCCESS_WITH_ERRORS_E'])
 const TERMINAL_ERR_CODES = new Set(['ERROR', 'TERMINATED', 'TERMINATION_FAILED', 'UNKNOWN'])
+const NON_TERMINAL_CODES = new Set(['RUNNING', 'QUEUEING', 'IMPORTED', 'FETCHED'])
+const SUCCESS_ALIASES    = new Set(['COMPLETED', 'FINISHED', 'DONE'])
 const TERMINAL_RUN       = new Set(['success', 'error', 'cancelled'])
 const DONE_NODE          = new Set(['success', 'success_with_errors', 'error', 'skipped', 'cancelled'])
 
@@ -184,7 +186,11 @@ async function launchTask(connectionId, nodeDef, defaults = {}) {
 
 async function pollSapStatus(connectionId, sapRunId) {
   const r = await soapRequest(connectionId, 'getTaskStatusByRunId2', { runId: sapRunId })
-  return (r.statusCode || '').toUpperCase()
+  return {
+    code: (r.statusCode || '').toUpperCase(),
+    endTime: r.endTime || null,
+    statusMsg: r.statusMsg || null,
+  }
 }
 
 // ─── Group wave helper ────────────────────────────────────────────────────────
@@ -237,9 +243,15 @@ async function executeWave(run, waveIndex, allNodes, allEdges) {
 
 // ─── Poll helpers ─────────────────────────────────────────────────────────────
 
-function applyTaskResult(ns, code, strategy, maxRetries, retryDelaySec) {
+function applyTaskResult(ns, sapStatus, strategy, maxRetries, retryDelaySec) {
+  const code = (sapStatus?.code || '').toUpperCase()
+  const hasEndTime = Boolean(sapStatus?.endTime)
+  const statusMsg = (sapStatus?.statusMsg || '').toLowerCase()
   if (SUCCESS_CODES.has(code)) {
     ns.status = code === 'SUCCESS' ? 'success' : 'success_with_errors'
+    ns.sapStatusCode = code; ns.finishedAt = new Date().toISOString()
+  } else if (SUCCESS_ALIASES.has(code)) {
+    ns.status = 'success'
     ns.sapStatusCode = code; ns.finishedAt = new Date().toISOString()
   } else if (TERMINAL_ERR_CODES.has(code)) {
     if (strategy === 'retry' && ns.retryCount < maxRetries) {
@@ -250,6 +262,13 @@ function applyTaskResult(ns, code, strategy, maxRetries, retryDelaySec) {
       ns.status = 'error'; ns.sapStatusCode = code
       ns.finishedAt = new Date().toISOString(); ns.error = `SAP: ${code}`
     }
+  } else if (hasEndTime && !NON_TERMINAL_CODES.has(code)) {
+    // Defensive fallback: some tenants return non-documented terminal codes.
+    const looksError = statusMsg.includes('error') || statusMsg.includes('fail')
+    ns.status = looksError ? 'error' : 'success'
+    ns.sapStatusCode = code || 'ENDTIME_ONLY'
+    ns.finishedAt = new Date().toISOString()
+    if (looksError) ns.error = `SAP: ${code || 'UNKNOWN'}${sapStatus?.statusMsg ? ` - ${sapStatus.statusMsg}` : ''}`
   }
 }
 
@@ -264,10 +283,10 @@ async function pollTaskNode(run, nodeId, nodeDef) {
     return
   }
   if (ns.status !== 'running' || !ns.sapRunId) return
-  let code
-  try { code = await pollSapStatus(run.connectionId, ns.sapRunId) }
+  let sapStatus
+  try { sapStatus = await pollSapStatus(run.connectionId, ns.sapRunId) }
   catch { return }
-  applyTaskResult(ns, code,
+  applyTaskResult(ns, sapStatus,
     nodeDef.data?.errorStrategy || 'stop',
     nodeDef.data?.maxRetries    || 0,
     nodeDef.data?.retryDelaySec || 30)
@@ -306,10 +325,10 @@ async function pollGroupNode(run, nodeId, nodeDef, allNodes, allEdges) {
       return
     }
     if (cs.status !== 'running' || !cs.sapRunId) return
-    let code
-    try { code = await pollSapStatus(run.connectionId, cs.sapRunId) }
+    let sapStatus
+    try { sapStatus = await pollSapStatus(run.connectionId, cs.sapRunId) }
     catch { return }
-    applyTaskResult(cs, code,
+    applyTaskResult(cs, sapStatus,
       childDef.data?.errorStrategy || 'stop',
       childDef.data?.maxRetries    || 0,
       childDef.data?.retryDelaySec || 30)

@@ -4,6 +4,7 @@ import { STATUS_COLORS, STATUS_ICONS } from '../canvasUtils'
 
 const STRATEGY_COLOR = { stop: '#64748b', continue: '#fbbf24', retry: '#3b82f6' }
 const STRATEGY_LABEL = { stop: 'error: detener', continue: 'error: continuar', retry: 'error: reintentar' }
+const RUNNING_GREEN = '#22c55e'
 
 export default function TaskNode({ data, selected, id }) {
   const [hovered, setHovered] = useState(false)
@@ -18,10 +19,10 @@ export default function TaskNode({ data, selected, id }) {
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
-        width: 210, background: 'var(--bg2)',
-        border: `1.5px solid ${selected ? 'var(--accent)' : isActive ? '#3b82f6' : 'var(--border2)'}`,
+        width: 210, background: isActive ? `${RUNNING_GREEN}12` : 'var(--bg2)',
+        border: `1.5px solid ${selected ? 'var(--accent)' : isActive ? RUNNING_GREEN : 'var(--border2)'}`,
         borderRadius: 10, overflow: 'hidden', cursor: 'pointer',
-        boxShadow: selected ? '0 0 0 2px rgba(247,168,0,.25)' : isActive ? '0 0 0 2px rgba(59,130,246,.2)' : 'none',
+        boxShadow: selected ? '0 0 0 2px rgba(247,168,0,.25)' : isActive ? '0 0 0 2px rgba(34,197,94,.25)' : 'none',
         transition: 'border-color .2s, box-shadow .2s',
         userSelect: 'none',
       }}
@@ -34,7 +35,7 @@ export default function TaskNode({ data, selected, id }) {
 
       {/* Header */}
       <div style={{
-        padding: '8px 10px 6px', background: 'var(--bg3)',
+        padding: '8px 10px 6px', background: isActive ? `${RUNNING_GREEN}18` : 'var(--bg3)',
         display: 'flex', alignItems: 'center', gap: 6,
       }}>
         <span style={{ fontSize: 11, color, fontWeight: 700, flexShrink: 0, fontFamily: 'var(--mono)' }}>
