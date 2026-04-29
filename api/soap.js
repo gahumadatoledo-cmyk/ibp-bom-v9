@@ -139,7 +139,7 @@ function buildBody(operation, params = {}) {
     case 'getTaskStatusByRunId':
       return `<web:taskStatusRequest><runId>${xe(params.runId)}</runId></web:taskStatusRequest>`
 
-    case 'getAllExecutedTasks2': {
+    case 'getAllExecutedTasks2':
     case 'getAllExecutedTasks': {
       const startFrom = params.startDateFrom
         ? `<startDate><from>${xe(params.startDateFrom)}</from>${params.startDateTo ? `<to>${xe(params.startDateTo)}</to>` : ''}</startDate>`
