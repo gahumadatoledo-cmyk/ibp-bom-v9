@@ -3,18 +3,29 @@ import ProgressBar from '../ui/ProgressBar'
 import TechLogs, { useTechLogs } from '../TechLogs'
 
 async function soapCall(connection, sessionId, operation, params = {}) {
+  const debugSoap = typeof window !== 'undefined'
+    && (import.meta.env.DEV || localStorage.getItem('ibpSoapDebug') === '1')
   const res = await fetch('/api/soap', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       connection: { hciUrl: connection.hciUrl, orgName: connection.orgName, isProduction: connection.isProduction },
-      sessionId, operation, params,
+      sessionId, operation, params: debugSoap ? { ...params, _debug: true } : params,
     }),
   })
-  const data = await res.json()
+  const raw = await res.text()
+  let data = null
+  try { data = raw ? JSON.parse(raw) : null } catch {}
   if (res.status === 401) throw Object.assign(new Error('Sesión SAP expirada'), { isSessionExpired: true })
-  if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
+  if (!res.ok) {
+    const msg = data?.error || raw?.slice(0, 240) || `HTTP ${res.status}`
+    throw new Error(msg)
+  }
+  if (!data) throw new Error(raw?.slice(0, 240) || 'Respuesta inválida del servidor')
   if (data.error) throw new Error(data.error)
+  if (debugSoap && data?._result !== undefined) {
+    return data._result
+  }
   return data
 }
 
@@ -244,8 +255,12 @@ function RunModal({ task, connection, sessionId, onClose, onSuccess, addLog, onT
             sessionId, operation: 'getTaskInfo', params: { taskGuid: task.taskGuid, _debug: true },
           }),
         })
-          .then(r => r.json())
+          .then(async (r) => {
+            const raw = await r.text()
+            try { return raw ? JSON.parse(raw) : null } catch { return null }
+          })
           .then(d => {
+            if (!d) return
             console.log(`[SOAP DEBUG][Tasks RunModal] op=${d._operation || 'getTaskInfo'}`, {
               soapAction: d._soapAction,
               requestBodyXml: d._requestBodyXml,

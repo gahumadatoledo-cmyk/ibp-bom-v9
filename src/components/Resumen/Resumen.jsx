@@ -59,9 +59,15 @@ async function soapCall(connection, sessionId, operation, params = {}) {
       sessionId, operation, params: debugSoap ? { ...params, _debug: true } : params,
     }),
   })
-  const data = await res.json()
+  const raw = await res.text()
+  let data = null
+  try { data = raw ? JSON.parse(raw) : null } catch {}
   if (res.status === 401) throw Object.assign(new Error('Sesión SAP expirada'), { isSessionExpired: true })
-  if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
+  if (!res.ok) {
+    const msg = data?.error || raw?.slice(0, 240) || `HTTP ${res.status}`
+    throw new Error(msg)
+  }
+  if (!data) throw new Error(raw?.slice(0, 240) || 'Respuesta inválida del servidor')
   if (data.error) throw new Error(data.error)
   if (debugSoap && data?._result !== undefined) {
     console.log(`[SOAP DEBUG][Resumen] op=${data._operation || operation}`, {

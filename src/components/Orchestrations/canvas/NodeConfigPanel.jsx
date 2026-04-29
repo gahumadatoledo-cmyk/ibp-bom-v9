@@ -7,8 +7,12 @@ async function soapCall(connection, sessionId, operation, params = {}) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ connection: { hciUrl, orgName, isProduction }, sessionId, operation, params }),
   })
-  const data = await res.json()
-  if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
+  const raw = await res.text()
+  let data = null
+  try { data = raw ? JSON.parse(raw) : null } catch {}
+  if (res.status === 401) throw Object.assign(new Error('Sesión SAP expirada'), { isSessionExpired: true })
+  if (!res.ok) throw new Error(data?.error || raw?.slice(0, 240) || `HTTP ${res.status}`)
+  if (!data) throw new Error(raw?.slice(0, 240) || 'Respuesta inválida del servidor')
   return data
 }
 
