@@ -2,8 +2,7 @@ import crypto from 'crypto'
 
 const REDIS_URL   = process.env.KV_REST_API_URL
 const REDIS_TOKEN = process.env.KV_REST_API_TOKEN
-const KEY      = 'cids:orchestrations'
-const CONN_KEY = 'cids:connections'
+const KEY = 'cids:orchestrations'
 
 // ─── Redis helpers ────────────────────────────────────────────────────────────
 
@@ -127,10 +126,6 @@ export default async function handler(req, res) {
       const { connectionId, name, steps = [], nodes = [], edges = [] } = req.body || {}
       if (!connectionId) return res.status(400).json({ error: 'connectionId requerido' })
       if (!name?.trim()) return res.status(400).json({ error: 'name requerido' })
-      const connections = await redisGetArr(CONN_KEY)
-      if (!connections.find(c => c.id === connectionId)) {
-        return res.status(404).json({ error: 'Conexión no encontrada' })
-      }
       const now = new Date().toISOString()
       const orch = {
         id: crypto.randomUUID(),

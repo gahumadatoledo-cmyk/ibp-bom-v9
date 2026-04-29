@@ -48,19 +48,23 @@ function fmtDuration(mins) {
   return m > 0 ? `${h}h ${m}m` : `${h}h`
 }
 
-async function soapCall(connectionId, operation, params = {}) {
+async function soapCall(connection, sessionId, operation, params = {}) {
   const res = await fetch('/api/soap', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ connectionId, operation, params }),
+    body: JSON.stringify({
+      connection: { hciUrl: connection.hciUrl, orgName: connection.orgName, isProduction: connection.isProduction },
+      sessionId, operation, params,
+    }),
   })
   const data = await res.json()
+  if (res.status === 401) throw Object.assign(new Error('Sesión SAP expirada'), { isSessionExpired: true })
   if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
   if (data.error) throw new Error(data.error)
   return data
 }
 
-export default function Resumen({ connection }) {
+export default function Resumen({ connection, sessionId, onSessionExpired }) {
   const [rows, setRows]           = useState([])
   const [agents, setAgents]       = useState([])
   const [loading, setLoading]     = useState(true)
@@ -79,11 +83,11 @@ export default function Resumen({ connection }) {
     const start = performance.now()
     try {
       const [tasks, agentGroups] = await Promise.all([
-        soapCall(connection.id, 'getAllExecutedTasks2', {
+        soapCall(connection, sessionId, 'getAllExecutedTasks2', {
           startDateFrom: toIso(fromDate),
           startDateTo:   toIso(toDate),
         }),
-        soapCall(connection.id, 'getAgents', { activeOnly: false }),
+        soapCall(connection, sessionId, 'getAgents', { activeOnly: false }),
       ])
       addLogRef.current({ method: 'POST', path: 'getAllExecutedTasks2 + getAgents', status: 200, duration: Math.round(performance.now() - start), detail: `${tasks.length} tasks` })
       setRows(Array.isArray(tasks) ? tasks : [])
@@ -92,12 +96,13 @@ export default function Resumen({ connection }) {
       setAgents(flat)
       setLast(new Date())
     } catch (e) {
+      if (e.isSessionExpired) { onSessionExpired?.(); return }
       addLogRef.current({ method: 'POST', path: 'resumen', status: 0, duration: Math.round(performance.now() - start), detail: e.message })
       setError(e.message)
     } finally {
       setLoading(false)
     }
-  }, [connection.id, fromDate, toDate])
+  }, [connection, sessionId, fromDate, toDate])
 
   useEffect(() => {
     loadData()

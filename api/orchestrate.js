@@ -1,5 +1,5 @@
 import crypto from 'crypto'
-import { redisGet, decrypt, logon, buildBody, buildEnvelope, soapCall as rawSoapCall, parseResponse } from './soap.js'
+import { buildBody, buildEnvelope, soapCall as rawSoapCall, parseResponse } from './soap.js'
 
 const REDIS_URL   = process.env.KV_REST_API_URL
 const REDIS_TOKEN = process.env.KV_REST_API_TOKEN
@@ -79,19 +79,12 @@ async function withRunLock(orchestrationId, fn) {
 
 // ─── SOAP proxy ───────────────────────────────────────────────────────────────
 
-async function soapRequest(connectionId, operation, params) {
-  const connections = await redisGet('cids:connections')
-  const conn = connections.find(c => c.id === connectionId)
-  if (!conn) throw new Error('Conexión no encontrada')
-  const { serviceUrl, orgName, user, password: encPw, isProduction } = conn
-  if (!serviceUrl || !orgName || !user || !encPw) throw new Error('Conexión incompleta')
-  const password   = decrypt(encPw)
-  const sessionId  = await logon(serviceUrl, orgName, user, password, isProduction)
+async function soapRequest(connection, sessionId, operation, params) {
   const soapAction = SOAP_ACTIONS[operation] || `function=${operation}`
   const version    = operation === 'getTaskStatusByRunId2' ? '2.0' : null
   const body       = buildBody(operation, params)
   const envelope   = buildEnvelope(body, sessionId, version)
-  const { ok, status, text } = await rawSoapCall(serviceUrl, soapAction, envelope)
+  const { ok, status, text } = await rawSoapCall(connection.hciUrl, soapAction, envelope)
   if (!ok) {
     const m = text.match(/<(?:[\w]+:)?faultstring[^>]*>([\s\S]*?)<\/(?:[\w]+:)?faultstring>/i)
     throw new Error(m ? m[1].trim() : `SOAP error HTTP ${status}`)
@@ -145,8 +138,9 @@ function resolveGraph(orch) {
 // ─── Orchestration lookup ─────────────────────────────────────────────────────
 
 async function getOrchestration(orchestrationId) {
-  const all = await redisGet('cids:orchestrations')
-  return all.find(o => o.id === orchestrationId) || null
+  const all = await redisGetObj('cids:orchestrations')
+  const arr = Array.isArray(all) ? all : []
+  return arr.find(o => o.id === orchestrationId) || null
 }
 
 // ─── Node state initializer ───────────────────────────────────────────────────
@@ -173,8 +167,8 @@ function initNodeState(node, allNodes) {
 
 // ─── Task execution helpers ───────────────────────────────────────────────────
 
-async function launchTask(connectionId, nodeDef, defaults = {}) {
-  const result = await soapRequest(connectionId, 'runTask', {
+async function launchTask(connection, sessionId, nodeDef, defaults = {}) {
+  const result = await soapRequest(connection, sessionId, 'runTask', {
     taskName:        nodeDef.data.taskName,
     agentName:       nodeDef.data.agentName   || defaults.agentName  || undefined,
     profileName:     nodeDef.data.profileName || defaults.profileName || undefined,
@@ -184,8 +178,8 @@ async function launchTask(connectionId, nodeDef, defaults = {}) {
   return result.runId
 }
 
-async function pollSapStatus(connectionId, sapRunId) {
-  const r = await soapRequest(connectionId, 'getTaskStatusByRunId2', { runId: sapRunId })
+async function pollSapStatus(connection, sessionId, sapRunId) {
+  const r = await soapRequest(connection, sessionId, 'getTaskStatusByRunId2', { runId: sapRunId })
   return {
     code: (r.statusCode || '').toUpperCase(),
     endTime: r.endTime || null,
@@ -202,7 +196,7 @@ async function launchGroupWave(run, ns, waveIds, allNodes, defaults) {
     const cs = ns.children[childId]
     if (!childDef || !cs || cs.status !== 'pending') return
     cs.status = 'running'; cs.startedAt = new Date().toISOString()
-    try { cs.sapRunId = await launchTask(run.connectionId, childDef, defaults) }
+    try { cs.sapRunId = await launchTask(run.connection, run.sessionId, childDef, defaults) }
     catch (e) { cs.status = 'error'; cs.finishedAt = new Date().toISOString(); cs.error = e.message }
   }))
 }
@@ -220,7 +214,7 @@ async function executeWave(run, waveIndex, allNodes, allEdges) {
 
     if (nodeDef.type === 'task') {
       ns.status = 'running'; ns.startedAt = new Date().toISOString()
-      try { ns.sapRunId = await launchTask(run.connectionId, nodeDef, defaults) }
+      try { ns.sapRunId = await launchTask(run.connection, run.sessionId, nodeDef, defaults) }
       catch (e) { ns.status = 'error'; ns.finishedAt = new Date().toISOString(); ns.error = e.message }
 
     } else if (nodeDef.type === 'group') {
@@ -278,13 +272,13 @@ async function pollTaskNode(run, nodeId, nodeDef) {
   // Re-launch if pending retry and delay elapsed
   if (ns.status === 'pending' && ns.retryAt && new Date(ns.retryAt).getTime() <= Date.now()) {
     ns.status = 'running'; ns.retryAt = null; ns.sapRunId = null
-    try { ns.sapRunId = await launchTask(run.connectionId, nodeDef, defaults) }
+    try { ns.sapRunId = await launchTask(run.connection, run.sessionId, nodeDef, defaults) }
     catch (e) { ns.status = 'error'; ns.finishedAt = new Date().toISOString(); ns.error = e.message }
     return
   }
   if (ns.status !== 'running' || !ns.sapRunId) return
   let sapStatus
-  try { sapStatus = await pollSapStatus(run.connectionId, ns.sapRunId) }
+  try { sapStatus = await pollSapStatus(run.connection, run.sessionId, ns.sapRunId) }
   catch { return }
   applyTaskResult(ns, sapStatus,
     nodeDef.data?.errorStrategy || 'stop',
@@ -320,13 +314,13 @@ async function pollGroupNode(run, nodeId, nodeDef, allNodes, allEdges) {
     // Retry re-launch
     if (cs.status === 'pending' && cs.retryAt && new Date(cs.retryAt).getTime() <= Date.now()) {
       cs.retryAt = null
-      try { cs.sapRunId = await launchTask(run.connectionId, childDef, defaults); cs.status = 'running' }
+      try { cs.sapRunId = await launchTask(run.connection, run.sessionId, childDef, defaults); cs.status = 'running' }
       catch (e) { cs.status = 'error'; cs.finishedAt = new Date().toISOString(); cs.error = e.message }
       return
     }
     if (cs.status !== 'running' || !cs.sapRunId) return
     let sapStatus
-    try { sapStatus = await pollSapStatus(run.connectionId, cs.sapRunId) }
+    try { sapStatus = await pollSapStatus(run.connection, run.sessionId, cs.sapRunId) }
     catch { return }
     applyTaskResult(cs, sapStatus,
       childDef.data?.errorStrategy || 'stop',
@@ -366,7 +360,7 @@ async function pollGroupNode(run, nodeId, nodeDef, allNodes, allEdges) {
 
 // ─── Start run ────────────────────────────────────────────────────────────────
 
-async function startRun(orchestrationId, defaultAgent = null, defaultProfile = null) {
+async function startRun(orchestrationId, connection, sessionId, defaultAgent = null, defaultProfile = null) {
   return withRunLock(orchestrationId, async () => {
     const orch = await getOrchestration(orchestrationId)
     if (!orch) throw new Error('Orquestación no encontrada')
@@ -385,7 +379,8 @@ async function startRun(orchestrationId, defaultAgent = null, defaultProfile = n
 
     let run = {
       runId: crypto.randomUUID(),
-      orchestrationId, connectionId: orch.connectionId,
+      orchestrationId,
+      connection, sessionId,
       status: 'running', currentWave: 0,
       startedAt: new Date().toISOString(), finishedAt: null,
       defaultAgent: defaultAgent || null, defaultProfile: defaultProfile || null,
@@ -472,12 +467,12 @@ async function cancelRun(orchestrationId) {
     await Promise.allSettled(Object.values(run.nodes).flatMap(ns => {
       const tasks = []
       if (ns.type === 'task' && ns.status === 'running' && ns.sapRunId) {
-        tasks.push(soapRequest(run.connectionId, 'cancelTask', { runId: ns.sapRunId }).catch(() => {}))
+        tasks.push(soapRequest(run.connection, run.sessionId, 'cancelTask', { runId: ns.sapRunId }).catch(() => {}))
       }
       if (ns.type === 'group') {
         for (const cs of Object.values(ns.children || {})) {
           if (cs.status === 'running' && cs.sapRunId) {
-            tasks.push(soapRequest(run.connectionId, 'cancelTask', { runId: cs.sapRunId }).catch(() => {}))
+            tasks.push(soapRequest(run.connection, run.sessionId, 'cancelTask', { runId: cs.sapRunId }).catch(() => {}))
           }
         }
       }
@@ -518,7 +513,9 @@ export default async function handler(req, res) {
       const { orchestrationId, action, defaultAgent, defaultProfile } = req.body || {}
       if (!orchestrationId) return res.status(400).json({ error: 'orchestrationId requerido' })
       if (action !== 'start') return res.status(400).json({ error: 'action debe ser "start"' })
-      const run = await startRun(orchestrationId, defaultAgent || null, defaultProfile || null)
+      const { connection, sessionId } = req.body || {}
+      if (!connection?.hciUrl || !sessionId) return res.status(400).json({ error: 'connection y sessionId requeridos' })
+      const run = await startRun(orchestrationId, connection, sessionId, defaultAgent || null, defaultProfile || null)
       return res.status(201).json(run)
     }
 

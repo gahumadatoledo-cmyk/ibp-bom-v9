@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react'
 
-async function soapCall(connectionId, operation, params = {}) {
+async function soapCall(connection, sessionId, operation, params = {}) {
+  const { hciUrl, orgName, isProduction } = connection
   const res = await fetch('/api/soap', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ connectionId, operation, params }),
+    body: JSON.stringify({ connection: { hciUrl, orgName, isProduction }, sessionId, operation, params }),
   })
   const data = await res.json()
   if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
@@ -44,7 +45,7 @@ function initForm(data) {
   }
 }
 
-export default function NodeConfigPanel({ node, connection, onUpdate, onClose }) {
+export default function NodeConfigPanel({ node, connection, sessionId, onUpdate, onClose }) {
   if (!node) return null
   const isGroup = node.type === 'orchGroup' || node.type === 'group'
 
@@ -75,7 +76,7 @@ export default function NodeConfigPanel({ node, connection, onUpdate, onClose })
       let taskGuid = guid
       // Fallback: look up guid by exact task name
       if (!taskGuid && name) {
-        const results = await soapCall(connection.id, 'searchTasks', { nameFilter: name })
+        const results = await soapCall(connection, sessionId, 'searchTasks', { nameFilter: name })
         if (cancelled) return
         const match = Array.isArray(results)
           ? results.find(r => r.taskName?.trim() === name?.trim())
@@ -84,14 +85,14 @@ export default function NodeConfigPanel({ node, connection, onUpdate, onClose })
       }
       if (!taskGuid) { if (!cancelled) setVarsStatus('error'); return }
       if (import.meta.env.DEV) {
-        soapCall(connection.id, 'getTaskInfo', { taskGuid, _debug: true })
+        soapCall(connection, sessionId, 'getTaskInfo', { taskGuid, _debug: true })
           .then(d => {
             console.log('[NodeConfig getTaskInfo request envelope]', d._requestEnvelopeXml)
             console.log('[NodeConfig getTaskInfo raw]', d._rawXml)
           })
           .catch(() => {})
       }
-      const info = await soapCall(connection.id, 'getTaskInfo', { taskGuid })
+      const info = await soapCall(connection, sessionId, 'getTaskInfo', { taskGuid })
       if (cancelled) return
       const vars = Array.isArray(info?.globalVariables) ? info.globalVariables : []
       setTaskVars(vars)
@@ -100,7 +101,7 @@ export default function NodeConfigPanel({ node, connection, onUpdate, onClose })
 
     load().catch(() => { if (!cancelled) setVarsStatus('error') })
     return () => { cancelled = true }
-  }, [node.id, node.data.taskGuid, node.data.taskName, connection?.id, isGroup])
+  }, [node.id, node.data.taskGuid, node.data.taskName, connection, sessionId, isGroup])
 
   function patch(field, value) {
     setForm(f => ({ ...f, [field]: value }))

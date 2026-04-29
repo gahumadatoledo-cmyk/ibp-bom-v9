@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 
-async function soapCall(connectionId, operation, params = {}) {
+async function soapCall(connection, sessionId, operation, params = {}) {
+  const { hciUrl, orgName, isProduction } = connection
   const res = await fetch('/api/soap', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ connectionId, operation, params }),
+    body: JSON.stringify({ connection: { hciUrl, orgName, isProduction }, sessionId, operation, params }),
   })
   const data = await res.json()
   if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
@@ -50,7 +51,7 @@ function DragChip({ task, style }) {
   )
 }
 
-export default function TaskPalette({ connection, onAddGroup, collapsed = false, onToggle }) {
+export default function TaskPalette({ connection, sessionId, onAddGroup, collapsed = false, onToggle }) {
   const [projects, setProjects]     = useState([])
   const [expanded, setExpanded]     = useState({})
   const [tasks, setTasks]           = useState({})
@@ -78,11 +79,11 @@ export default function TaskPalette({ connection, onAddGroup, collapsed = false,
   }
 
   useEffect(() => {
-    soapCall(connection.id, 'getProjects')
+    soapCall(connection, sessionId, 'getProjects')
       .then(data => setProjects(Array.isArray(data) ? data : []))
       .catch(() => {})
       .finally(() => setLoadingP(false))
-  }, [connection.id])
+  }, [connection, sessionId])
 
   async function toggleProject(proj) {
     const guid = proj.guid
@@ -91,7 +92,7 @@ export default function TaskPalette({ connection, onAddGroup, collapsed = false,
     if (tasks[guid]) return
     setLoadingT(p => ({ ...p, [guid]: true }))
     try {
-      const data = await soapCall(connection.id, 'getProjectTasks', { projectGuid: guid })
+      const data = await soapCall(connection, sessionId, 'getProjectTasks', { projectGuid: guid })
       setTasks(p => ({ ...p, [guid]: Array.isArray(data) ? data : [] }))
     } catch {
       setTasks(p => ({ ...p, [guid]: [] }))

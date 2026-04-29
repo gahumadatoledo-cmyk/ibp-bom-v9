@@ -16,35 +16,45 @@ function useIsMobile() {
   return isMobile
 }
 
+const LS_KEY = 'ibp_connections'
+
+function loadConnections() {
+  try { return JSON.parse(localStorage.getItem(LS_KEY) || '[]') } catch { return [] }
+}
+function persistConnections(conns) {
+  localStorage.setItem(LS_KEY, JSON.stringify(conns))
+}
+
 export default function App() {
-  const [connections, setConnections] = useState([])
+  const [connections, setConnections] = useState(() => loadConnections())
   const [activeId, setActiveId] = useState('connections')
   const [sidebarExpanded, setSidebarExpanded] = useState(true)
   const [sidebarOpen, setSidebarOpen] = useState(false) // mobile drawer
-  const [loading, setLoading] = useState(true)
   const isMobile = useIsMobile()
-
-  useEffect(() => { fetchConnections() }, [])
 
   // Auto-collapse sidebar when switching to mobile
   useEffect(() => {
     if (isMobile) setSidebarExpanded(false)
   }, [isMobile])
 
-  async function fetchConnections() {
-    try {
-      const res = await fetch('/api/connections')
-      if (res.ok) setConnections(await res.json())
-    } catch (e) {
-      console.error('Error loading connections:', e)
-    } finally {
-      setLoading(false)
-    }
+  function addConnection(conn) {
+    const newConn = { ...conn, id: crypto.randomUUID() }
+    const updated = [...connections, newConn]
+    setConnections(updated)
+    persistConnections(updated)
   }
 
-  function handleDeleted(id) {
+  function updateConnection(conn) {
+    const updated = connections.map(c => c.id === conn.id ? conn : c)
+    setConnections(updated)
+    persistConnections(updated)
+  }
+
+  function deleteConnection(id) {
     if (activeId === id) setActiveId('connections')
-    fetchConnections()
+    const updated = connections.filter(c => c.id !== id)
+    setConnections(updated)
+    persistConnections(updated)
   }
 
   function handleSelect(id) {
@@ -56,7 +66,15 @@ export default function App() {
 
   function renderMain() {
     if (activeId === 'connections') {
-      return <Connections connections={connections} onSaved={fetchConnections} onDeleted={handleDeleted} onSelect={handleSelect} />
+      return (
+        <Connections
+          connections={connections}
+          onAdd={addConnection}
+          onUpdate={updateConnection}
+          onDelete={deleteConnection}
+          onSelect={handleSelect}
+        />
+      )
     }
     if (activeId === 'resumen-general') {
       return <GlobalResumen connections={connections} />
@@ -84,7 +102,7 @@ export default function App() {
           onSelect={handleSelect}
           expanded={sidebarExpanded}
           onToggle={() => setSidebarExpanded(p => !p)}
-          loading={loading}
+          loading={false}
           isMobile={isMobile}
           mobileOpen={sidebarOpen}
         />

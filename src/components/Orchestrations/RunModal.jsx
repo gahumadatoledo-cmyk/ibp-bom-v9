@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react'
 
-async function soapCall(connectionId, operation, params = {}) {
+async function soapCall(connection, sessionId, operation, params = {}) {
+  const { hciUrl, orgName, isProduction } = connection
   const res = await fetch('/api/soap', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ connectionId, operation, params }),
+    body: JSON.stringify({ connection: { hciUrl, orgName, isProduction }, sessionId, operation, params }),
   })
   const data = await res.json()
   if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
@@ -62,7 +63,7 @@ function FieldRow({ label, count, rawData, children }) {
   )
 }
 
-export default function RunModal({ connection, onConfirm, onClose }) {
+export default function RunModal({ connection, sessionId, onConfirm, onClose }) {
   const PRESETS_KEY = `ibp-presets-${connection.id}`
   const [agents,     setAgents]     = useState([])
   const [configs,    setConfigs]    = useState([])
@@ -101,8 +102,8 @@ export default function RunModal({ connection, onConfirm, onClose }) {
     async function load() {
       try {
         const [agentGroups, profs] = await Promise.all([
-          soapCall(connection.id, 'getAgents', { activeOnly: false }),
-          soapCall(connection.id, 'getSystemConfigurations'),
+          soapCall(connection, sessionId, 'getAgents', { activeOnly: false }),
+          soapCall(connection, sessionId, 'getSystemConfigurations'),
         ])
         setRawAgents(agentGroups)
         setRawConfigs(profs)
@@ -119,7 +120,7 @@ export default function RunModal({ connection, onConfirm, onClose }) {
       }
     }
     load()
-  }, [connection.id])
+  }, [connection, sessionId])
 
   function handleConfirm() {
     const agent  = useManual ? (manualAgent.trim() || null)  : (selectedAgent  || null)

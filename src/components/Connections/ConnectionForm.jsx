@@ -1,52 +1,32 @@
 import { useState } from 'react'
 
-export default function ConnectionForm({ initial, onSaved, onCancel }) {
+export default function ConnectionForm({ initial, onSave, onCancel }) {
   const [form, setForm] = useState({
-    name:         initial?.name        || '',
-    serviceUrl:   initial?.serviceUrl  || '',
-    orgName:      initial?.orgName     || '',
-    user:         initial?.user        || '',
-    password:     '',
+    name:         initial?.name         || '',
+    hciUrl:       initial?.hciUrl       || '',
+    orgName:      initial?.orgName      || '',
+    user:         initial?.user         || '',
     isProduction: initial?.isProduction ?? true,
-    logoUrl:      initial?.logoUrl     || '',
+    logoUrl:      initial?.logoUrl      || '',
   })
-  const [saving, setSaving] = useState(false)
-  const [error,  setError]  = useState('')
+  const [error, setError] = useState('')
 
   function set(k, v) { setForm(p => ({ ...p, [k]: v })) }
 
-  async function handleSave() {
-    if (!form.name)       { setError('El nombre es obligatorio'); return }
-    if (!form.serviceUrl) { setError('La URL del servicio es obligatoria'); return }
-    if (!form.orgName)    { setError('El nombre de organización es obligatorio'); return }
-    if (!form.user)       { setError('El usuario es obligatorio'); return }
-    if (!initial && !form.password) { setError('La contraseña es obligatoria para conexiones nuevas'); return }
-
-    setSaving(true); setError('')
-    try {
-      const body = {
-        name:         form.name,
-        serviceUrl:   form.serviceUrl.replace(/\/$/, ''),
-        orgName:      form.orgName,
-        user:         form.user,
-        isProduction: form.isProduction,
-        logoUrl:      form.logoUrl,
-        ...(form.password ? { password: form.password } : {}),
-      }
-      if (initial) body.id = initial.id
-
-      const res = await fetch('/api/connections', {
-        method:  initial ? 'PUT' : 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify(body),
-      })
-      if (!res.ok) throw new Error((await res.json()).error || 'Error')
-      onSaved()
-    } catch (e) {
-      setError(e.message)
-    } finally {
-      setSaving(false)
-    }
+  function handleSave() {
+    if (!form.name)   { setError('El nombre es obligatorio'); return }
+    if (!form.hciUrl) { setError('La URL del servicio es obligatoria'); return }
+    if (!form.orgName){ setError('El nombre de organización es obligatorio'); return }
+    setError('')
+    onSave({
+      ...(initial ? { id: initial.id } : {}),
+      name:         form.name,
+      hciUrl:       form.hciUrl.replace(/\/$/, ''),
+      orgName:      form.orgName,
+      user:         form.user,
+      isProduction: form.isProduction,
+      logoUrl:      form.logoUrl,
+    })
   }
 
   return (
@@ -65,8 +45,8 @@ export default function ConnectionForm({ initial, onSaved, onCancel }) {
       <div style={{ marginBottom: 14 }}>
         <Field
           label="URL del servicio SOAP"
-          value={form.serviceUrl}
-          onChange={v => set('serviceUrl', v)}
+          value={form.hciUrl}
+          onChange={v => set('hciUrl', v)}
           placeholder="https://us.cids.cloud.sap/webservices"
           mono
         />
@@ -75,16 +55,9 @@ export default function ConnectionForm({ initial, onSaved, onCancel }) {
         </div>
       </div>
 
-      {/* Row 3: User + Password + Repo */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 14, marginBottom: 14 }}>
-        <Field label="Usuario" value={form.user} onChange={v => set('user', v)} placeholder="WebServicesUser" mono />
-        <Field
-          label={initial ? 'Contraseña (vacío = mantener)' : 'Contraseña'}
-          value={form.password}
-          onChange={v => set('password', v)}
-          type="password"
-          placeholder={initial ? '••••••••' : 'Contraseña'}
-        />
+      {/* Row 3: User + Repo */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
+        <Field label="Usuario SAP (opcional, pre-rellena el login)" value={form.user} onChange={v => set('user', v)} placeholder="WebServicesUser" mono />
         <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
           <label style={{ fontSize: 10, fontWeight: 600, color: 'var(--text2)', textTransform: 'uppercase', letterSpacing: '.07em' }}>
             Repositorio
@@ -118,10 +91,10 @@ export default function ConnectionForm({ initial, onSaved, onCancel }) {
           background: 'none', border: '1px solid var(--border2)', borderRadius: 6,
           color: 'var(--text2)', fontSize: 12, fontWeight: 600, padding: '7px 18px',
         }}>Cancelar</button>
-        <button type="button" disabled={saving} onClick={handleSave} style={{
+        <button type="button" onClick={handleSave} style={{
           background: 'var(--accent)', border: 'none', borderRadius: 6,
           color: '#000', fontSize: 12, fontWeight: 700, padding: '7px 18px',
-        }}>{saving ? 'Guardando...' : initial ? 'Guardar cambios' : 'Crear conexión'}</button>
+        }}>{initial ? 'Guardar cambios' : 'Crear conexión'}</button>
       </div>
     </div>
   )

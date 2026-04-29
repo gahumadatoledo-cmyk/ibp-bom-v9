@@ -1,38 +1,3 @@
-import crypto from 'crypto'
-
-const REDIS_URL  = process.env.KV_REST_API_URL
-const REDIS_TOKEN = process.env.KV_REST_API_TOKEN
-const KEY = 'cids:connections'
-
-// ─── Redis helpers ────────────────────────────────────────────────────────────
-
-async function redisGet(key) {
-  const resp = await fetch(`${REDIS_URL}/pipeline`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${REDIS_TOKEN}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify([['GET', key]])
-  })
-  const data = await resp.json()
-  const result = data[0]?.result
-  if (!result) return []
-  try {
-    const parsed = JSON.parse(result)
-    return Array.isArray(parsed) ? parsed : []
-  } catch { return [] }
-}
-
-function decrypt(text) {
-  try {
-    const secret = process.env.ENCRYPTION_SECRET || 'default-secret-change-me'
-    const [ivHex, encrypted] = text.split(':')
-    const decipher = crypto.createDecipheriv(
-      'aes-256-cbc',
-      Buffer.from(secret.padEnd(32).slice(0, 32)),
-      Buffer.from(ivHex, 'hex')
-    )
-    return decipher.update(encrypted, 'hex', 'utf8') + decipher.final('utf8')
-  } catch { return '' }
-}
 
 // ─── XML helpers ──────────────────────────────────────────────────────────────
 
@@ -375,7 +340,7 @@ function parseResponse(operation, xml) {
 }
 
 // ─── Named exports for internal reuse ────────────────────────────────────────
-export { redisGet, decrypt, xe, parseFault, buildEnvelope, soapCall, logon, buildBody, parseResponse }
+export { xe, parseFault, buildEnvelope, soapCall, logon, buildBody, parseResponse }
 
 // ─── Main handler ─────────────────────────────────────────────────────────────
 
@@ -386,23 +351,12 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end()
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
-  if (!REDIS_URL || !REDIS_TOKEN) return res.status(500).json({ error: 'Redis no configurado' })
+  const { connection, sessionId, operation, params = {} } = req.body || {}
+  if (!connection?.hciUrl) return res.status(400).json({ error: 'connection.hciUrl requerido' })
+  if (!sessionId)          return res.status(400).json({ error: 'sessionId requerido' })
+  if (!operation)          return res.status(400).json({ error: 'operation requerido' })
 
-  const { connectionId, operation, params = {} } = req.body || {}
-  if (!connectionId) return res.status(400).json({ error: 'connectionId requerido' })
-  if (!operation)    return res.status(400).json({ error: 'operation requerido' })
-
-  // Resolve connection credentials
-  const connections = await redisGet(KEY)
-  const conn = connections.find(c => c.id === connectionId)
-  if (!conn) return res.status(404).json({ error: 'Conexión no encontrada' })
-
-  const { serviceUrl, orgName, user, password: encPw, isProduction } = conn
-  if (!serviceUrl || !orgName || !user || !encPw) {
-    return res.status(400).json({ error: 'Conexión incompleta — falta serviceUrl, orgName, user o password' })
-  }
-
-  const password = decrypt(encPw)
+  const { hciUrl, orgName, isProduction } = connection
 
   const soapActionMap = {
     getProjects:             'function=getAllProjects',
@@ -415,21 +369,14 @@ export default async function handler(req, res) {
   const version = ['getAllExecutedTasks2', 'getTaskStatusByRunId2'].includes(operation) ? '2.0' : null
 
   try {
-    // Logon to get SessionID
-    const sessionId = await logon(serviceUrl, orgName, user, password, isProduction)
-
-    // ping = logon-only test; if logon succeeded the connection is alive
-    if (operation === 'ping') {
-      return res.json({ message: 'Conexión exitosa' })
-    }
-
-    // Build and execute operation
     const body = buildBody(operation, params)
     const envelope = buildEnvelope(body, sessionId, version)
-    const { ok, status, text } = await soapCall(serviceUrl, soapAction, envelope)
+    const { ok, status, text } = await soapCall(hciUrl, soapAction, envelope)
 
     if (!ok) {
       const fault = parseFault(text)
+      const isSessionError = /session/i.test(fault?.faultCode || '') || /session/i.test(fault?.faultString || '')
+      if (isSessionError) return res.status(401).json({ error: 'SESSION_EXPIRED' })
       return res.status(status).json({
         error: fault?.faultString || `SOAP error HTTP ${status}`,
         faultCode: fault?.faultCode,

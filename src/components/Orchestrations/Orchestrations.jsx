@@ -24,13 +24,13 @@ function RunBadge({ status }) {
   )
 }
 
-export default function Orchestrations({ connection }) {
+export default function Orchestrations({ connection, sessionId, onSessionExpired }) {
   const {
     orchs, loading, error, selected, selectedId, setSelectedId,
     run, isRunning, saving, starting, cancelling,
     createOrch, deleteOrch, saveGraph, commitName,
     handleStart, handleCancel,
-  } = useOrchestration(connection)
+  } = useOrchestration(connection, sessionId)
 
   const [selectedNodeId, setSelectedNodeId]   = useState(null)
   const [editingName, setEditingName]         = useState(false)
@@ -104,6 +104,7 @@ export default function Orchestrations({ connection }) {
       {/* Task palette */}
       <TaskPalette
         connection={connection}
+        sessionId={sessionId}
         onAddGroup={() => addGroupRef.current?.()}
         collapsed={paletteCollapsed}
         onToggle={() => setPaletteCollapsed(v => !v)}
@@ -266,6 +267,7 @@ export default function Orchestrations({ connection }) {
             <NodeConfigPanel
               node={selectedNode}
               connection={connection}
+              sessionId={sessionId}
               onUpdate={handleNodeUpdate}
               onClose={() => setSelectedNodeId(null)}
             />
@@ -317,6 +319,7 @@ export default function Orchestrations({ connection }) {
       {showRunModal && (
         <RunModal
           connection={connection}
+          sessionId={sessionId}
           onConfirm={(agentName, profileName) => {
             setShowRunModal(false)
             setLastRunParams({ agentName, profileName })
@@ -329,6 +332,7 @@ export default function Orchestrations({ connection }) {
       {runSingleNode && (
         <RunSingleModal
           connection={connection}
+          sessionId={sessionId}
           node={runSingleNode}
           onClose={() => setRunSingleNode(null)}
         />
@@ -338,6 +342,7 @@ export default function Orchestrations({ connection }) {
         <RunLogModal
           run={run}
           connection={connection}
+          sessionId={sessionId}
           nodes={selected?.nodes || []}
           onClose={() => setShowLogModal(false)}
         />

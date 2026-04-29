@@ -73,7 +73,7 @@ export default function Sidebar({ connections, activeId, onSelect, expanded, onT
             <SidebarItem
               key={c.id}
               id={c.id}
-              label={c.name}
+              label={`${c.name} (${c.isProduction ? 'Productivo' : 'Sandbox'})`}
               icon={String(idx + 1)}
               numberIcon
               active={activeId === c.id}

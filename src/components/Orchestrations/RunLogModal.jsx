@@ -1,11 +1,12 @@
 import { useState } from 'react'
 import { STATUS_COLORS } from './canvasUtils'
 
-async function soapCall(connectionId, operation, params = {}) {
+async function soapCall(connection, sessionId, operation, params = {}) {
+  const { hciUrl, orgName, isProduction } = connection
   const res = await fetch('/api/soap', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ connectionId, operation, params }),
+    body: JSON.stringify({ connection: { hciUrl, orgName, isProduction }, sessionId, operation, params }),
   })
   const data = await res.json()
   if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
@@ -43,7 +44,7 @@ function StatusBadge({ status }) {
   )
 }
 
-function SapLogsButton({ connectionId, sapRunId }) {
+function SapLogsButton({ connection, sessionId, sapRunId }) {
   const [logs, setLogs]     = useState(null)
   const [loading, setLoading] = useState(false)
   const [open, setOpen]     = useState(false)
@@ -53,7 +54,7 @@ function SapLogsButton({ connectionId, sapRunId }) {
     if (logs)  { setOpen(true); return }
     setLoading(true)
     try {
-      const data = await soapCall(connectionId, 'getTaskLogs', {
+      const data = await soapCall(connection, sessionId, 'getTaskLogs', {
         runId: sapRunId, errorLog: true, monitorLog: true,
       })
       setLogs(data)
@@ -86,7 +87,7 @@ function SapLogsButton({ connectionId, sapRunId }) {
   )
 }
 
-function NodeRow({ ns, nodeDef, connectionId, indent }) {
+function NodeRow({ ns, nodeDef, connection, sessionId, indent }) {
   const name = nodeDef?.data?.label || nodeDef?.data?.taskName || ns.nodeId
   const isGroup = ns.type === 'group'
   const typeColor = isGroup ? '#a78bfa' : '#29ABE2'
@@ -129,13 +130,13 @@ function NodeRow({ ns, nodeDef, connectionId, indent }) {
         </div>
       )}
       {ns.sapRunId && (
-        <SapLogsButton connectionId={connectionId} sapRunId={ns.sapRunId} />
+        <SapLogsButton connection={connection} sessionId={sessionId} sapRunId={ns.sapRunId} />
       )}
     </div>
   )
 }
 
-export default function RunLogModal({ run, connection, nodes = [], onClose }) {
+export default function RunLogModal({ run, connection, sessionId, nodes = [], onClose }) {
   const overallColor = STATUS_COLORS[run.status] || '#64748b'
 
   const topLevel = Object.values(run.nodes)
@@ -181,10 +182,10 @@ export default function RunLogModal({ run, connection, nodes = [], onClose }) {
               : []
             return (
               <div key={ns.nodeId} style={{ marginTop: 8 }}>
-                <NodeRow ns={ns} nodeDef={nodeDef} connectionId={connection.id} indent={false} />
+                <NodeRow ns={ns} nodeDef={nodeDef} connection={connection} sessionId={sessionId} indent={false} />
                 {children.map(cs => {
                   const childDef = nodes.find(n => n.id === cs.nodeId)
-                  return <NodeRow key={cs.nodeId} ns={cs} nodeDef={childDef} connectionId={connection.id} indent />
+                  return <NodeRow key={cs.nodeId} ns={cs} nodeDef={childDef} connection={connection} sessionId={sessionId} indent />
                 })}
               </div>
             )

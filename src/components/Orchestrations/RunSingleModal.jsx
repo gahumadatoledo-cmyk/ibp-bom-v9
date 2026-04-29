@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react'
 
-async function soapCall(connectionId, operation, params = {}) {
+async function soapCall(connection, sessionId, operation, params = {}) {
+  const { hciUrl, orgName, isProduction } = connection
   const res = await fetch('/api/soap', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ connectionId, operation, params }),
+    body: JSON.stringify({ connection: { hciUrl, orgName, isProduction }, sessionId, operation, params }),
   })
   const data = await res.json()
   if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
@@ -20,7 +21,7 @@ const labelStyle = {
   textTransform: 'uppercase', letterSpacing: '.06em', display: 'block', marginBottom: 5,
 }
 
-export default function RunSingleModal({ connection, node, onClose }) {
+export default function RunSingleModal({ connection, sessionId, node, onClose }) {
   const [agents,      setAgents]      = useState([])
   const [configs,     setConfigs]     = useState([])
   const [loading,     setLoading]     = useState(true)
@@ -32,15 +33,15 @@ export default function RunSingleModal({ connection, node, onClose }) {
 
   useEffect(() => {
     Promise.all([
-      soapCall(connection.id, 'getAgents', { activeOnly: false }),
-      soapCall(connection.id, 'getSystemConfigurations'),
+      soapCall(connection, sessionId, 'getAgents', { activeOnly: false }),
+      soapCall(connection, sessionId, 'getSystemConfigurations'),
     ]).then(([agentGroups, profs]) => {
       const flat = (Array.isArray(agentGroups) ? agentGroups : [])
         .flatMap(g => Array.isArray(g.agents) ? g.agents : [])
       setAgents(flat)
       setConfigs(Array.isArray(profs) ? profs : [])
     }).catch(() => {}).finally(() => setLoading(false))
-  }, [connection.id])
+  }, [connection, sessionId])
 
   async function handleRun() {
     setRunning(true)
@@ -48,7 +49,7 @@ export default function RunSingleModal({ connection, node, onClose }) {
     setResult(null)
     try {
       const vars = (node.data.globalVariables || []).filter(v => v.name.trim())
-      const res = await soapCall(connection.id, 'runTask', {
+      const res = await soapCall(connection, sessionId, 'runTask', {
         taskName:        node.data.taskName,
         agentName:       agentName  || null,
         profileName:     profileName || null,

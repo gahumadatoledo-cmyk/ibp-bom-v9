@@ -2,19 +2,23 @@ import { useState, useEffect, useCallback } from 'react'
 import ProgressBar from '../ui/ProgressBar'
 import TechLogs, { useTechLogs } from '../TechLogs'
 
-async function soapCall(connectionId, operation, params = {}) {
+async function soapCall(connection, sessionId, operation, params = {}) {
   const res = await fetch('/api/soap', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ connectionId, operation, params }),
+    body: JSON.stringify({
+      connection: { hciUrl: connection.hciUrl, orgName: connection.orgName, isProduction: connection.isProduction },
+      sessionId, operation, params,
+    }),
   })
   const data = await res.json()
+  if (res.status === 401) throw Object.assign(new Error('Sesión SAP expirada'), { isSessionExpired: true })
   if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
   if (data.error) throw new Error(data.error)
   return data
 }
 
-export default function Tasks({ connection, onTaskRun }) {
+export default function Tasks({ connection, sessionId, onSessionExpired, onTaskRun }) {
   const [projects, setProjects]   = useState([])
   const [expanded, setExpanded]   = useState({})
   const [tasks, setTasks]         = useState({})     // projectGuid → tasks[]
@@ -29,16 +33,17 @@ export default function Tasks({ connection, onTaskRun }) {
     setLoadingP(true); setError('')
     const start = performance.now()
     try {
-      const data = await soapCall(connection.id, 'getProjects')
+      const data = await soapCall(connection, sessionId, 'getProjects')
       addLog({ method: 'POST', path: 'getProjects', status: 200, duration: Math.round(performance.now() - start), detail: `${data.length} proyectos` })
       setProjects(Array.isArray(data) ? data : [])
     } catch (e) {
+      if (e.isSessionExpired) { onSessionExpired?.(); return }
       addLog({ method: 'POST', path: 'getProjects', status: 0, duration: Math.round(performance.now() - start), detail: e.message })
       setError(e.message)
     } finally {
       setLoadingP(false)
     }
-  }, [connection.id])
+  }, [connection, sessionId])
 
   useEffect(() => { load() }, [load])
 
@@ -50,10 +55,11 @@ export default function Tasks({ connection, onTaskRun }) {
     setLoadingT(p => ({ ...p, [guid]: true }))
     const start = performance.now()
     try {
-      const data = await soapCall(connection.id, 'getProjectTasks', { projectGuid: guid })
+      const data = await soapCall(connection, sessionId, 'getProjectTasks', { projectGuid: guid })
       addLog({ method: 'POST', path: 'getProjectTasks', status: 200, duration: Math.round(performance.now() - start), detail: `${data.length} tasks` })
       setTasks(p => ({ ...p, [guid]: Array.isArray(data) ? data : [] }))
     } catch (e) {
+      if (e.isSessionExpired) { onSessionExpired?.(); return }
       addLog({ method: 'POST', path: 'getProjectTasks', status: 0, duration: Math.round(performance.now() - start), detail: e.message })
       setTasks(p => ({ ...p, [guid]: [] }))
     } finally {
@@ -153,7 +159,6 @@ export default function Tasks({ connection, onTaskRun }) {
                     <TaskRow
                       key={task.taskGuid || ti}
                       task={task}
-                      connectionId={connection.id}
                       onRun={() => setRunModal(task)}
                       isLast={ti === filteredTasks.length - 1}
                     />
@@ -171,7 +176,8 @@ export default function Tasks({ connection, onTaskRun }) {
       {runModal && (
         <RunModal
           task={runModal}
-          connectionId={connection.id}
+          connection={connection}
+          sessionId={sessionId}
           onClose={() => setRunModal(null)}
           onSuccess={() => setRunModal(null)}
           addLog={addLog}
@@ -182,7 +188,7 @@ export default function Tasks({ connection, onTaskRun }) {
   )
 }
 
-function TaskRow({ task, connectionId, onRun, isLast }) {
+function TaskRow({ task, onRun, isLast }) {
   const typeColor = task.type === 'PROCESS' ? 'var(--purple)' : 'var(--cyan)'
   return (
     <div style={{
@@ -214,7 +220,7 @@ function TaskRow({ task, connectionId, onRun, isLast }) {
   )
 }
 
-function RunModal({ task, connectionId, onClose, onSuccess, addLog, onTaskRun }) {
+function RunModal({ task, connection, sessionId, onClose, onSuccess, addLog, onTaskRun }) {
   const [step, setStep]           = useState('loading') // loading | form | running | done | error
   const [taskInfo, setTaskInfo]   = useState(null)
   const [agents, setAgents]       = useState([])
@@ -231,7 +237,10 @@ function RunModal({ task, connectionId, onClose, onSuccess, addLog, onTaskRun })
         fetch('/api/soap', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ connectionId, operation: 'getTaskInfo', params: { taskGuid: task.taskGuid, _debug: true } }),
+          body: JSON.stringify({
+            connection: { hciUrl: connection.hciUrl, orgName: connection.orgName, isProduction: connection.isProduction },
+            sessionId, operation: 'getTaskInfo', params: { taskGuid: task.taskGuid, _debug: true },
+          }),
         })
           .then(r => r.json())
           .then(d => {
@@ -243,9 +252,9 @@ function RunModal({ task, connectionId, onClose, onSuccess, addLog, onTaskRun })
       }
       try {
         const [info, agentGroups, profs] = await Promise.all([
-          soapCall(connectionId, 'getTaskInfo', { taskGuid: task.taskGuid }),
-          soapCall(connectionId, 'getAgents', { activeOnly: true }),
-          soapCall(connectionId, 'getSystemConfigurations'),
+          soapCall(connection, sessionId, 'getTaskInfo', { taskGuid: task.taskGuid }),
+          soapCall(connection, sessionId, 'getAgents', { activeOnly: true }),
+          soapCall(connection, sessionId, 'getSystemConfigurations'),
         ])
         setTaskInfo(info)
         // Flatten agents from groups
@@ -263,7 +272,7 @@ function RunModal({ task, connectionId, onClose, onSuccess, addLog, onTaskRun })
       }
     }
     init()
-  }, [connectionId, task.taskGuid])
+  }, [connection, sessionId, task.taskGuid])
 
   async function handleRun() {
     setStep('running')
@@ -272,7 +281,7 @@ function RunModal({ task, connectionId, onClose, onSuccess, addLog, onTaskRun })
       .map(([name, value]) => ({ name, value }))
     const start = performance.now()
     try {
-      const data = await soapCall(connectionId, 'runTask', {
+      const data = await soapCall(connection, sessionId, 'runTask', {
         taskName: task.taskName,
         ...(agentName   ? { agentName }   : {}),
         ...(profileName ? { profileName } : {}),

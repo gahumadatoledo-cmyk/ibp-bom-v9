@@ -4,7 +4,7 @@ import { migrateStepsToGraph } from './canvasUtils'
 const POLL_MS = 5000
 const TERMINAL = new Set(['success', 'error', 'cancelled'])
 
-export function useOrchestration(connection) {
+export function useOrchestration(connection, sessionId) {
   const [orchs, setOrchs]     = useState([])
   const [selectedId, setSelectedId] = useState(null)
   const [run, setRun]         = useState(null)
@@ -152,6 +152,8 @@ export function useOrchestration(connection) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           orchestrationId: selectedId, action: 'start',
+          connection: { hciUrl: connection.hciUrl, orgName: connection.orgName, isProduction: connection.isProduction },
+          sessionId,
           defaultAgent: agentName || null, defaultProfile: profileName || null,
         }),
       })

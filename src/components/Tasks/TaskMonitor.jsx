@@ -35,19 +35,23 @@ function toIso(localDatetime) {
   return new Date(localDatetime).toISOString()
 }
 
-async function soapCall(connectionId, operation, params = {}) {
+async function soapCall(connection, sessionId, operation, params = {}) {
   const res = await fetch('/api/soap', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ connectionId, operation, params }),
+    body: JSON.stringify({
+      connection: { hciUrl: connection.hciUrl, orgName: connection.orgName, isProduction: connection.isProduction },
+      sessionId, operation, params,
+    }),
   })
   const data = await res.json()
+  if (res.status === 401) throw Object.assign(new Error('Sesión SAP expirada'), { isSessionExpired: true })
   if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
   if (data.error) throw new Error(data.error)
   return data
 }
 
-export default function TaskMonitor({ connection, initialSearch, onSearchConsumed }) {
+export default function TaskMonitor({ connection, sessionId, onSessionExpired, initialSearch, onSearchConsumed }) {
   const [rows, setRows]           = useState([])
   const [loading, setLoading]     = useState(true)
   const [error, setError]         = useState('')
@@ -99,7 +103,7 @@ export default function TaskMonitor({ connection, initialSearch, onSearchConsume
     setLoading(true); setError('')
     const start = performance.now()
     try {
-      const data = await soapCall(connection.id, 'getAllExecutedTasks2', {
+      const data = await soapCall(connection, sessionId, 'getAllExecutedTasks2', {
         startDateFrom: toIso(fromDate),
         startDateTo:   toIso(toDate),
       })
@@ -107,12 +111,13 @@ export default function TaskMonitor({ connection, initialSearch, onSearchConsume
       setRows(Array.isArray(data) ? data : [])
       setLast(new Date())
     } catch (e) {
+      if (e.isSessionExpired) { onSessionExpired?.(); return }
       addLogRef.current({ method: 'POST', path: 'getAllExecutedTasks2', status: 0, duration: Math.round(performance.now() - start), detail: e.message })
       setError(e.message)
     } finally {
       setLoading(false)
     }
-  }, [connection.id, fromDate, toDate])
+  }, [connection, sessionId, fromDate, toDate])
 
   useEffect(() => {
     loadTasks()
@@ -126,7 +131,7 @@ export default function TaskMonitor({ connection, initialSearch, onSearchConsume
     setCancelling(true); setCancelMsg('')
     const start = performance.now()
     try {
-      const data = await soapCall(connection.id, 'cancelTask', { runId: selectedRow.runId })
+      const data = await soapCall(connection, sessionId, 'cancelTask', { runId: selectedRow.runId })
       addLog({ method: 'POST', path: 'cancelTask', status: 200, duration: Math.round(performance.now() - start), detail: data.status })
       setCancelMsg('ok')
       await loadTasks()
@@ -297,7 +302,8 @@ export default function TaskMonitor({ connection, initialSearch, onSearchConsume
       {logsModal && (
         <LogsModal
           runId={logsModal}
-          connectionId={connection.id}
+          connection={connection}
+          sessionId={sessionId}
           onClose={() => setLogsModal(null)}
         />
       )}
@@ -323,7 +329,7 @@ function FilterBtn({ active, onClick, label, count, meta }) {
   )
 }
 
-function LogsModal({ runId, connectionId, onClose }) {
+function LogsModal({ runId, connection, sessionId, onClose }) {
   const [activeLog, setActiveLog] = useState('monitorLog')
   const [data, setData]   = useState(null)
   const [loading, setLoading] = useState(true)
@@ -336,7 +342,8 @@ function LogsModal({ runId, connectionId, onClose }) {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            connectionId, operation: 'getTaskLogs',
+            connection: { hciUrl: connection.hciUrl, orgName: connection.orgName, isProduction: connection.isProduction },
+            sessionId, operation: 'getTaskLogs',
             params: { runId, traceLog: { getLog: true }, monitorLog: { getLog: true }, errorLog: { getLog: true } }
           }),
         })
@@ -350,7 +357,7 @@ function LogsModal({ runId, connectionId, onClose }) {
       }
     }
     load()
-  }, [runId, connectionId])
+  }, [runId, connection, sessionId])
 
   const LOG_TABS = [
     { key: 'monitorLog', label: 'Monitor' },

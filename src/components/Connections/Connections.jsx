@@ -1,12 +1,13 @@
 import { useState } from 'react'
 import ConnectionForm from './ConnectionForm'
 import ConnectionAvatar from './ConnectionAvatar'
+import SapLoginModal from './SapLoginModal'
 import TechLogs, { useTechLogs } from '../TechLogs'
 
-export default function Connections({ connections, onSaved, onDeleted, onSelect }) {
+export default function Connections({ connections, onAdd, onUpdate, onDelete, onSelect }) {
   const [showForm, setShowForm] = useState(false)
   const [editing, setEditing] = useState(null)
-  const [testing, setTesting] = useState(null)
+  const [testTarget, setTestTarget] = useState(null) // conn being tested via login modal
   const [testResult, setTestResult] = useState({})
   const [logs, addLog] = useTechLogs()
 
@@ -20,42 +21,37 @@ export default function Connections({ connections, onSaved, onDeleted, onSelect 
     setShowForm(true)
   }
 
-  function handleSaved() {
+  function handleSave(conn) {
+    if (editing) {
+      onUpdate(conn)
+    } else {
+      onAdd(conn)
+    }
     setShowForm(false)
     setEditing(null)
-    onSaved()
   }
 
-  async function handleDelete(id, name) {
+  function handleDelete(id, name) {
     if (!confirm(`¿Eliminar la conexión "${name}"?`)) return
-    await fetch('/api/connections', {
-      method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id }),
-    })
-    onDeleted(id)
+    onDelete(id)
   }
 
-  async function handleTest(conn) {
-    setTesting(conn.id)
-    setTestResult(p => ({ ...p, [conn.id]: null }))
+  function handleTest(conn) {
+    setTestTarget(conn)
+  }
+
+  function handleTestSuccess(conn, sessionId) {
     const start = performance.now()
-    try {
-      const res = await fetch('/api/soap', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ connectionId: conn.id, operation: 'ping', params: {} }),
-      })
-      const duration = Math.round(performance.now() - start)
-      addLog({ method: 'POST', path: `ping (${conn.name})`, status: res.status, duration, detail: res.ok ? 'Conexión exitosa' : 'Error de conexión' })
-      setTestResult(p => ({ ...p, [conn.id]: res.ok ? 'ok' : 'error' }))
-    } catch (e) {
-      const duration = Math.round(performance.now() - start)
-      addLog({ method: 'POST', path: `ping (${conn.name})`, status: 0, duration, detail: e.message })
-      setTestResult(p => ({ ...p, [conn.id]: 'error' }))
-    } finally {
-      setTesting(null)
-    }
+    const duration = Math.round(performance.now() - start)
+    addLog({ method: 'POST', path: `sap-login (${conn.name})`, status: 200, duration, detail: 'Conexión exitosa' })
+    setTestResult(p => ({ ...p, [conn.id]: 'ok' }))
+    setTestTarget(null)
+    // store sessionId for when user opens this connection
+    sessionStorage.setItem(`sap_${conn.id}`, sessionId)
+  }
+
+  function handleTestCancel() {
+    setTestTarget(null)
   }
 
   return (
@@ -65,7 +61,7 @@ export default function Connections({ connections, onSaved, onDeleted, onSelect 
         <div>
           <div style={{ fontSize: 18, fontWeight: 700, color: '#fff' }}>Conexiones</div>
           <div style={{ fontSize: 12, color: 'var(--text2)', marginTop: 3 }}>
-            Gestiona los sistemas SAP CI-DS disponibles para el equipo de soporte
+            Gestiona los sistemas SAP CI-DS — las conexiones se guardan en este navegador
           </div>
         </div>
         <button onClick={handleNew} style={{
@@ -81,7 +77,7 @@ export default function Connections({ connections, onSaved, onDeleted, onSelect 
         <div style={{ marginBottom: 24 }}>
           <ConnectionForm
             initial={editing}
-            onSaved={handleSaved}
+            onSave={handleSave}
             onCancel={() => { setShowForm(false); setEditing(null) }}
           />
         </div>
@@ -111,22 +107,19 @@ export default function Connections({ connections, onSaved, onDeleted, onSelect 
 
       {/* Connection cards */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        {connections.map((conn, idx) => (
+        {connections.map(conn => (
           <div key={conn.id} style={{
             background: 'var(--bg2)', border: '1px solid var(--border)',
             borderRadius: 10, padding: '16px 20px',
             display: 'flex', alignItems: 'center', gap: 16,
           }}>
-
-            {/* Avatar */}
             <ConnectionAvatar name={conn.name} logoUrl={conn.logoUrl} size={40} />
 
-            {/* Info */}
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontWeight: 700, color: '#fff', fontSize: 14 }}>{conn.name}</div>
+              <div style={{ fontWeight: 700, color: '#fff', fontSize: 14 }}>{conn.name} ({conn.isProduction ? 'Productivo' : 'Sandbox'})</div>
+              {conn.hciUrl && <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{conn.hciUrl}</div>}
             </div>
 
-            {/* Test result */}
             {testResult[conn.id] && (
               <div style={{
                 fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 20,
@@ -138,24 +131,23 @@ export default function Connections({ connections, onSaved, onDeleted, onSelect 
               </div>
             )}
 
-            {/* Actions */}
             <div style={{ display: 'flex', gap: 8, flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-              <button onClick={() => onSelect(conn.id)} style={btnStyle('var(--cyan)')}>
-                Abrir
-              </button>
-              <button onClick={() => handleTest(conn)} disabled={testing === conn.id} style={btnStyle('var(--text2)')}>
-                {testing === conn.id ? '...' : 'Probar'}
-              </button>
-              <button onClick={() => handleEdit(conn)} style={btnStyle('var(--text2)')}>
-                Editar
-              </button>
-              <button onClick={() => handleDelete(conn.id, conn.name)} style={btnStyle('var(--red)')}>
-                Eliminar
-              </button>
+              <button onClick={() => onSelect(conn.id)} style={btnStyle('var(--cyan)')}>Abrir</button>
+              <button onClick={() => handleTest(conn)} style={btnStyle('var(--text2)')}>Probar</button>
+              <button onClick={() => handleEdit(conn)} style={btnStyle('var(--text2)')}>Editar</button>
+              <button onClick={() => handleDelete(conn.id, conn.name)} style={btnStyle('var(--red)')}>Eliminar</button>
             </div>
           </div>
         ))}
       </div>
+
+      {testTarget && (
+        <SapLoginModal
+          connection={testTarget}
+          onSuccess={sid => handleTestSuccess(testTarget, sid)}
+          onCancel={handleTestCancel}
+        />
+      )}
 
       <TechLogs logs={logs} />
     </div>

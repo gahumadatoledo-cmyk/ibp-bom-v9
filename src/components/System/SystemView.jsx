@@ -4,6 +4,7 @@ import TaskMonitor from '../Tasks/TaskMonitor'
 import Resumen from '../Resumen/Resumen'
 import Orchestrations from '../Orchestrations/Orchestrations'
 import ConnectionAvatar from '../Connections/ConnectionAvatar'
+import SapLoginModal from '../Connections/SapLoginModal'
 
 const TABS = [
   { id: 'resumen',        label: 'Resumen'          },
@@ -16,9 +17,32 @@ export default function SystemView({ connection }) {
   const [activeTab, setActiveTab]           = useState('resumen')
   const [headerCollapsed, setHeaderCollapsed] = useState(false)
   const [pendingTaskName, setPendingTaskName] = useState(null)
+  const [sessionId, setSessionId] = useState(() => sessionStorage.getItem(`sap_${connection.id}`))
+  const [showLogin, setShowLogin] = useState(!sessionStorage.getItem(`sap_${connection.id}`))
+
+  function handleLoginSuccess(sid) {
+    sessionStorage.setItem(`sap_${connection.id}`, sid)
+    setSessionId(sid)
+    setShowLogin(false)
+  }
+
+  function handleSessionExpired() {
+    sessionStorage.removeItem(`sap_${connection.id}`)
+    setSessionId(null)
+    setShowLogin(true)
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+      {/* SAP login modal */}
+      {showLogin && (
+        <SapLoginModal
+          connection={connection}
+          onSuccess={handleLoginSuccess}
+          onCancel={() => history.back()}
+        />
+      )}
+
       {/* System header — colapsable */}
       {!headerCollapsed && (
         <div style={{
@@ -29,7 +53,7 @@ export default function SystemView({ connection }) {
           <div style={{ flex: 1 }}>
             <div style={{ fontWeight: 700, color: '#fff', fontSize: 14 }}>{connection.name}</div>
             <div style={{ fontSize: 10, color: 'var(--text2)', fontFamily: 'var(--mono)', marginTop: 1 }}>
-              {connection.serviceUrl} · {connection.orgName} · {connection.isProduction ? 'Producción' : 'Sandbox'}
+              {connection.hciUrl} · {connection.orgName} · {connection.isProduction ? 'Producción' : 'Sandbox'}
             </div>
           </div>
           <button
@@ -49,7 +73,6 @@ export default function SystemView({ connection }) {
         display: 'flex', gap: 0, borderBottom: '1px solid var(--border)',
         background: 'var(--bg2)', padding: '0 16px', flexShrink: 0, alignItems: 'center',
       }}>
-        {/* Mini-avatar visible solo cuando la cabecera está colapsada */}
         {headerCollapsed && (
           <button
             onClick={() => setHeaderCollapsed(false)}
@@ -77,10 +100,10 @@ export default function SystemView({ connection }) {
 
       {/* Content */}
       <div style={{ flex: 1, overflow: 'auto' }}>
-        {activeTab === 'resumen'        && <Resumen         connection={connection} />}
-        {activeTab === 'tasks'          && <Tasks            connection={connection} onTaskRun={(name) => { setPendingTaskName(name); setActiveTab('monitor') }} />}
-        {activeTab === 'monitor'        && <TaskMonitor      connection={connection} initialSearch={pendingTaskName} onSearchConsumed={() => setPendingTaskName(null)} />}
-        {activeTab === 'orchestrations' && <Orchestrations   connection={connection} />}
+        {activeTab === 'resumen'        && <Resumen       connection={connection} sessionId={sessionId} onSessionExpired={handleSessionExpired} />}
+        {activeTab === 'tasks'          && <Tasks          connection={connection} sessionId={sessionId} onSessionExpired={handleSessionExpired} onTaskRun={(name) => { setPendingTaskName(name); setActiveTab('monitor') }} />}
+        {activeTab === 'monitor'        && <TaskMonitor    connection={connection} sessionId={sessionId} onSessionExpired={handleSessionExpired} initialSearch={pendingTaskName} onSearchConsumed={() => setPendingTaskName(null)} />}
+        {activeTab === 'orchestrations' && <Orchestrations connection={connection} sessionId={sessionId} onSessionExpired={handleSessionExpired} />}
       </div>
     </div>
   )
