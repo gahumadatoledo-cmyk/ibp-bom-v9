@@ -133,10 +133,10 @@ export default function NodeConfigPanel({ node, connection, sessionId, onUpdate,
       const updated = f.globalVariables.map((v, j) => {
         if (j !== i) return v
         const next = { ...v, [field]: value }
-        // Auto-fill value from SAP defaultValue when picking a name
-        if (field === 'name' && !v.value) {
+        // Always pre-fill value from SAP defaultValue when changing the variable selection
+        if (field === 'name') {
           const tv = taskVars.find(t => t.name === value)
-          if (tv?.defaultValue) next.value = tv.defaultValue
+          next.value = tv?.defaultValue ?? ''
         }
         return next
       })
@@ -291,7 +291,7 @@ export default function NodeConfigPanel({ node, connection, sessionId, onUpdate,
                     style={{ ...inputStyle, flex: 1 }}
                     value={v.value}
                     onChange={e => patchVar(i, 'value', e.target.value)}
-                    placeholder={varsStatus === 'loading' ? '…' : 'valor'}
+                    placeholder={varsStatus === 'loading' ? '…' : (taskVars.find(t => t.name === v.name)?.defaultValue || 'valor')}
                     disabled={varsStatus === 'loading'}
                   />
                   <button onClick={() => removeVar(i)} style={{

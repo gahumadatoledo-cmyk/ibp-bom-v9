@@ -291,7 +291,7 @@ function parseResponse(operation, xml) {
       return {
         projectName:      xmlVal(xml, 'projectName'),
         jobId:            xmlVal(xml, 'jobId'),
-        statusCode:       xmlVal(xml, 'statusCode'),
+        statusCode:       (xmlVal(xml, 'statusCode') || '').replace(/^TASK:/, ''),
         statusMsg:        xmlVal(xml, 'statusMsg'),
         startTime:        xmlVal(xml, 'startTime'),
         endTime:          xmlVal(xml, 'endTime'),
@@ -302,17 +302,28 @@ function parseResponse(operation, xml) {
     }
 
     case 'getAllExecutedTasks2':
-    case 'getAllExecutedTasks':
-      return xmlAll(xml, 'return').map(r => {
-        const attrs = {
-          jobId:      xmlAttr(r, 'return', 'jobId'),
-          startDate:  xmlAttr(r, 'return', 'startDate'),
-          statusCode: xmlAttr(r, 'return', 'statusCode'),
-          taskName:   xmlAttr(r, 'return', 'taskName'),
-        }
-        const runId = xmlVal(r, 'return') || r.replace(/<[^>]+>/g, '').trim()
-        return { runId, ...attrs }
-      })
+    case 'getAllExecutedTasks': {
+      const normalizeStatus = s => (s || '').replace(/^TASK:/, '')
+      // Newer SAP format: <runId jobId="..." startDate="..." statusCode="TASK:SUCCESS" taskName="...">VALUE</runId>
+      const runIdElems = xmlAll(xml, 'runId')
+      if (runIdElems.length > 0) {
+        return runIdElems.map(r => ({
+          runId:      xmlVal(r, 'runId') || r.replace(/<[^>]+>/g, '').trim(),
+          jobId:      xmlAttr(r, 'runId', 'jobId'),
+          startDate:  xmlAttr(r, 'runId', 'startDate'),
+          statusCode: normalizeStatus(xmlAttr(r, 'runId', 'statusCode')),
+          taskName:   xmlAttr(r, 'runId', 'taskName'),
+        }))
+      }
+      // Legacy format: <return jobId="..." ...>runId</return>
+      return xmlAll(xml, 'return').map(r => ({
+        runId:      xmlVal(r, 'return') || r.replace(/<[^>]+>/g, '').trim(),
+        jobId:      xmlAttr(r, 'return', 'jobId'),
+        startDate:  xmlAttr(r, 'return', 'startDate'),
+        statusCode: normalizeStatus(xmlAttr(r, 'return', 'statusCode')),
+        taskName:   xmlAttr(r, 'return', 'taskName'),
+      }))
+    }
 
     case 'getTaskLogs': {
       const parseLog = (name) => {
