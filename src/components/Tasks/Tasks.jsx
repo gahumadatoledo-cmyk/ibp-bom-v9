@@ -233,7 +233,9 @@ function RunModal({ task, connection, sessionId, onClose, onSuccess, addLog, onT
 
   useEffect(() => {
     async function init() {
-      if (import.meta.env.DEV) {
+      const debugSoap = typeof window !== 'undefined'
+        && (import.meta.env.DEV || localStorage.getItem('ibpSoapDebug') === '1')
+      if (debugSoap) {
         fetch('/api/soap', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -244,8 +246,12 @@ function RunModal({ task, connection, sessionId, onClose, onSuccess, addLog, onT
         })
           .then(r => r.json())
           .then(d => {
-            console.log('[getTaskInfo request envelope]', d._requestEnvelopeXml)
-            console.log('[getTaskInfo raw]', d._rawXml)
+            console.log(`[SOAP DEBUG][Tasks RunModal] op=${d._operation || 'getTaskInfo'}`, {
+              soapAction: d._soapAction,
+              requestBodyXml: d._requestBodyXml,
+              requestEnvelopeXml: d._requestEnvelopeXml,
+              rawXml: d._rawXml,
+            })
             addLog({ method: 'DBG', path: 'getTaskInfo vars', status: 200, duration: 0, detail: `vars=${d._result?.globalVariables?.length ?? 0} | req=${d._requestBodyXml?.slice(0, 180)} | res=${d._rawXml?.slice(0, 220)}` })
           })
           .catch(console.error)

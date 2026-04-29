@@ -84,11 +84,17 @@ export default function NodeConfigPanel({ node, connection, sessionId, onUpdate,
         taskGuid = match?.taskGuid
       }
       if (!taskGuid) { if (!cancelled) setVarsStatus('error'); return }
-      if (import.meta.env.DEV) {
+      const debugSoap = typeof window !== 'undefined'
+        && (import.meta.env.DEV || localStorage.getItem('ibpSoapDebug') === '1')
+      if (debugSoap) {
         soapCall(connection, sessionId, 'getTaskInfo', { taskGuid, _debug: true })
           .then(d => {
-            console.log('[NodeConfig getTaskInfo request envelope]', d._requestEnvelopeXml)
-            console.log('[NodeConfig getTaskInfo raw]', d._rawXml)
+            console.log(`[SOAP DEBUG][NodeConfig] op=${d._operation || 'getTaskInfo'}`, {
+              soapAction: d._soapAction,
+              requestBodyXml: d._requestBodyXml,
+              requestEnvelopeXml: d._requestEnvelopeXml,
+              rawXml: d._rawXml,
+            })
           })
           .catch(() => {})
       }

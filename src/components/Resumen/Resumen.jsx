@@ -49,18 +49,29 @@ function fmtDuration(mins) {
 }
 
 async function soapCall(connection, sessionId, operation, params = {}) {
+  const debugSoap = typeof window !== 'undefined'
+    && (import.meta.env.DEV || localStorage.getItem('ibpSoapDebug') === '1')
   const res = await fetch('/api/soap', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       connection: { hciUrl: connection.hciUrl, orgName: connection.orgName, isProduction: connection.isProduction },
-      sessionId, operation, params,
+      sessionId, operation, params: debugSoap ? { ...params, _debug: true } : params,
     }),
   })
   const data = await res.json()
   if (res.status === 401) throw Object.assign(new Error('Sesión SAP expirada'), { isSessionExpired: true })
   if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
   if (data.error) throw new Error(data.error)
+  if (debugSoap && data?._result !== undefined) {
+    console.log(`[SOAP DEBUG][Resumen] op=${data._operation || operation}`, {
+      soapAction: data._soapAction,
+      requestBodyXml: data._requestBodyXml,
+      requestEnvelopeXml: data._requestEnvelopeXml,
+      rawXml: data._rawXml,
+    })
+    return data._result
+  }
   return data
 }
 

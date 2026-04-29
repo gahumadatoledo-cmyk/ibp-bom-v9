@@ -113,7 +113,7 @@ function buildBody(operation, params = {}) {
       return `<web:searchTasksRequest><nameFilter>${xe(params.nameFilter || '')}</nameFilter></web:searchTasksRequest>`
 
     case 'getTaskInfo':
-      return `<web:taskInfoResponse><taskGuid>${xe(params.taskGuid)}</taskGuid></web:taskInfoResponse>`
+      return `<web:taskInfoRequest><taskGuid>${xe(params.taskGuid)}</taskGuid></web:taskInfoRequest>`
 
     case 'getAgents':
       return `<web:allAgentsRequest><activeOnly>${params.activeOnly ? 'true' : 'false'}</activeOnly></web:allAgentsRequest>`
@@ -136,9 +136,11 @@ function buildBody(operation, params = {}) {
     }
 
     case 'getTaskStatusByRunId2':
+    case 'getTaskStatusByRunId':
       return `<web:taskStatusRequest><runId>${xe(params.runId)}</runId></web:taskStatusRequest>`
 
     case 'getAllExecutedTasks2': {
+    case 'getAllExecutedTasks': {
       const startFrom = params.startDateFrom
         ? `<startDate><from>${xe(params.startDateFrom)}</from>${params.startDateTo ? `<to>${xe(params.startDateTo)}</to>` : ''}</startDate>`
         : ''
@@ -279,7 +281,8 @@ function parseResponse(operation, xml) {
     case 'runTask':
       return { runId: xmlVal(xml, 'RunID') || xmlVal(xml, 'runId') || xmlVal(xml, 'RunId') }
 
-    case 'getTaskStatusByRunId2': {
+    case 'getTaskStatusByRunId2':
+    case 'getTaskStatusByRunId': {
       const batchInfos = xmlAll(xml, 'uploadBatchInfos').map(b => ({
         id:        xmlVal(b, 'id'),
         name:      xmlVal(b, 'name'),
@@ -299,6 +302,7 @@ function parseResponse(operation, xml) {
     }
 
     case 'getAllExecutedTasks2':
+    case 'getAllExecutedTasks':
       return xmlAll(xml, 'return').map(r => {
         const attrs = {
           jobId:      xmlAttr(r, 'return', 'jobId'),
@@ -367,11 +371,33 @@ export default async function handler(req, res) {
   }
   const soapAction = soapActionMap[operation] || `function=${operation}`
   const version = ['getAllExecutedTasks2', 'getTaskStatusByRunId2'].includes(operation) ? '2.0' : null
+  const fallbackOperation = operation === 'getAllExecutedTasks2'
+    ? 'getAllExecutedTasks'
+    : operation === 'getTaskStatusByRunId2'
+      ? 'getTaskStatusByRunId'
+      : null
 
   try {
-    const body = buildBody(operation, params)
-    const envelope = buildEnvelope(body, sessionId, version)
-    const { ok, status, text } = await soapCall(hciUrl, soapAction, envelope)
+    let activeOperation = operation
+    let activeSoapAction = soapAction
+    let activeVersion = version
+    let body = buildBody(activeOperation, params)
+    let envelope = buildEnvelope(body, sessionId, activeVersion)
+    let { ok, status, text } = await soapCall(hciUrl, activeSoapAction, envelope)
+
+    // Some tenants expose non-v2 names only; retry automatically with alias.
+    if (!ok && fallbackOperation) {
+      const lower = text.toLowerCase()
+      const unknownOp = lower.includes('unknown operation') || lower.includes('not recognized') || lower.includes('invalid function')
+      if (unknownOp) {
+        activeOperation = fallbackOperation
+        activeSoapAction = `function=${activeOperation}`
+        activeVersion = null
+        body = buildBody(activeOperation, params)
+        envelope = buildEnvelope(body, sessionId, activeVersion)
+        ;({ ok, status, text } = await soapCall(hciUrl, activeSoapAction, envelope))
+      }
+    }
 
     if (!ok) {
       const fault = parseFault(text)
@@ -384,11 +410,12 @@ export default async function handler(req, res) {
       })
     }
 
-    const result = parseResponse(operation, text)
+    const result = parseResponse(activeOperation, text)
     if (params._debug) {
       return res.json({
         _result: result,
-        _soapAction: soapAction,
+        _soapAction: activeSoapAction,
+        _operation: activeOperation,
         _requestBodyXml: body,
         _requestEnvelopeXml: sanitizeSessionId(envelope),
         _rawXml: text,
