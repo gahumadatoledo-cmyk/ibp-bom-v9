@@ -19,7 +19,7 @@ export default function GroupNode({ data, selected, id }) {
   const modeColor  = ms.color
   const modeLabel  = ms.label
   const bg         = `rgba(${r},${g},${b},${isActive ? 0.08 : 0.04})`
-  const borderColor = selected ? 'var(--accent)' : isActive ? '#3b82f6' : `rgba(${r},${g},${b},0.4)`
+  const borderColor = selected ? 'var(--accent)' : isActive ? color : `rgba(${r},${g},${b},0.4)`
   const hBorder     = `rgba(${r},${g},${b},${selected ? 0.3 : 0.15})`
 
   return (

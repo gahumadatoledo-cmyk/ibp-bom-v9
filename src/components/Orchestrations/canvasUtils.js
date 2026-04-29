@@ -96,7 +96,7 @@ export function hasCycle(nodes, edges) {
 
 export const STATUS_COLORS = {
   pending:             '#64748b',
-  running:             '#3b82f6',
+  running:             '#22c55e',
   success:             '#34d399',
   success_with_errors: '#fbbf24',
   error:               '#ff6b6b',
